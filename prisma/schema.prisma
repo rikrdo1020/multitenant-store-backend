@@ -1,0 +1,353 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum ProductStatus {
+  draft
+  published
+  archived
+}
+
+enum ShippingType {
+  pickup_point
+  delivery_zone
+  third_party
+}
+
+enum OrderStatus {
+  pending
+  paid
+  cancelled
+  failed
+  rejected
+  expired
+}
+
+enum UserRole {
+  superadmin
+  admin
+  manager
+}
+
+enum TenantStatus {
+  active
+  suspended
+  inactive
+}
+
+enum PaymentProvider {
+  stripe
+  yappy
+  paypal
+  mercadopago
+}
+
+// ---------------------------------------------------------------------------
+// Core models
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  phone        String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenants       TenantMember[]
+  refreshTokens RefreshToken[]
+  ownedTenants  Tenant[]       @relation("TenantOwner")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Tenant {
+  id             String          @id @default(cuid())
+  slug           String          @unique
+  name           String
+  status         TenantStatus    @default(active)
+  logo           String?
+  description    String?
+  primaryColor   String?         @default("#000000")
+  seoTitle       String?
+  seoDescription String?
+  provider       PaymentProvider @default(stripe)
+  providerConfig Json?
+  customDomain   String?         @unique
+  ownerId        String
+  owner          User            @relation("TenantOwner", fields: [ownerId], references: [id])
+
+  members         TenantMember[]
+  products        Product[]
+  categories      Category[]
+  brands          Brand[]
+  tags            Tag[]
+  productTypes    ProductType[]
+  orders          Order[]
+  customers       Customer[]
+  shippingMethods ShippingMethod[]
+  combos          Combo[]
+  settings        TenantSetting?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TenantMember {
+  id       String   @id @default(cuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenantId String
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  role     UserRole @default(admin)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, tenantId])
+}
+
+// ---------------------------------------------------------------------------
+// Customer (storefront buyer, not a platform User)
+// ---------------------------------------------------------------------------
+
+model Customer {
+  id      String  @id @default(cuid())
+  name    String
+  email   String
+  phone   String
+  address String?
+  city    String?
+  country String? @default("PA")
+  notes   String?
+
+  tenantId String
+  tenant   Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  orders   Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([email, tenantId])
+}
+
+// ---------------------------------------------------------------------------
+// Catalog
+// ---------------------------------------------------------------------------
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String
+  description String?
+  images      String[] @default([])
+
+  tenantId String
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([slug, tenantId])
+}
+
+model Brand {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String
+  logo        String?
+  website     String?
+  description String?
+
+  tenantId String
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([slug, tenantId])
+}
+
+model Tag {
+  id   String @id @default(cuid())
+  name String
+  slug String
+
+  tenantId String
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  products Product[] @relation("ProductTags")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([slug, tenantId])
+}
+
+model ProductType {
+  id          String  @id @default(cuid())
+  name        String
+  slug        String
+  description String?
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([slug, tenantId])
+}
+
+model Product {
+  id             String        @id @default(cuid())
+  name           String
+  slug           String
+  description    Json?
+  price          Decimal       @db.Decimal(10, 2)
+  discountPrice  Decimal?      @db.Decimal(10, 2)
+  dku            String
+  stock          Int           @default(0)
+  productStatus  ProductStatus @default(draft)
+  type           String?
+  volume         String?
+  options        Json?
+  images         String[]      @default([])
+  isFeatured     Boolean       @default(false)
+  featuredOrder  Int           @default(9999)
+  seoTitle       String?
+  seoDescription String?
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id])
+  brandId    String?
+  brand      Brand?    @relation(fields: [brandId], references: [id])
+  tags       Tag[]     @relation("ProductTags")
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([slug, tenantId])
+  @@unique([dku, tenantId])
+}
+
+// ---------------------------------------------------------------------------
+// Shipping
+// ---------------------------------------------------------------------------
+
+model ShippingMethod {
+  id              String       @id @default(cuid())
+  name            String
+  type            ShippingType
+  basePrice       Decimal?     @db.Decimal(10, 2)
+  requiresDetails Boolean      @default(false)
+  disclaimer      String?
+
+  tenantId String
+  tenant   Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  logistics ShippingLocation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ShippingLocation {
+  id         String   @id @default(cuid())
+  key        String
+  label      String
+  extraPrice Decimal? @db.Decimal(10, 2)
+
+  shippingMethodId String
+  shippingMethod   ShippingMethod @relation(fields: [shippingMethodId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([key, shippingMethodId])
+}
+
+// ---------------------------------------------------------------------------
+// Orders
+// ---------------------------------------------------------------------------
+
+model Order {
+  id                 String      @id @default(cuid())
+  orderId            String      @unique
+  total              Decimal     @db.Decimal(10, 2)
+  orderStatus        OrderStatus @default(pending)
+  transactionId      String?
+  shippingCost       Decimal     @db.Decimal(10, 2)
+  customerData       Json
+  shippingData       Json
+  items              Json
+  shippingMethodId   String?
+  shippingLocationId String?
+  paymentMethod      String      @default("stripe")
+  confirmationNumber String?
+  dispatched         Boolean     @default(false)
+
+  tenantId   String
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Combos
+// ---------------------------------------------------------------------------
+
+model Combo {
+  id       String  @id @default(cuid())
+  name     String
+  price    Decimal @db.Decimal(10, 2)
+  rules    Json
+  isActive Boolean @default(true)
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Tenant settings (1-1)
+// ---------------------------------------------------------------------------
+
+model TenantSetting {
+  id                String  @id @default(cuid())
+  lowStockThreshold Int     @default(5)
+  currency          String  @default("USD")
+  taxRate           Decimal @default(0) @db.Decimal(5, 2)
+  emailFrom         String?
+  emailFromName     String?
+
+  tenantId String @unique
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  updatedAt DateTime @updatedAt
+}

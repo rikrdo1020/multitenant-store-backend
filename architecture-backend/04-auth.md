@@ -1,0 +1,120 @@
+# Backend Authentication
+
+## JWT Strategy
+
+Two token types:
+- **Access Token**: short-lived (15 min), contains user id, role, tenant context.
+- **Refresh Token**: long-lived (7 days), stored in `RefreshToken` table for revocation.
+
+```ts
+// Access Token Payload
+{
+  sub: string;       // userId
+  role: UserRole;    // superadmin | admin | manager
+  tenantId?: string; // current active tenant (for admin tokens)
+  type: "access";
+  iat: number;
+  exp: number;
+}
+
+// Refresh Token Payload
+{
+  sub: string;       // userId
+  type: "refresh";
+  jti: string;       // unique token id for revocation
+  iat: number;
+  exp: number;
+}
+```
+
+## Auth Flow
+
+### Register
+```
+POST /auth/register
+Body: { email, password, name }
+→ Validate email uniqueness
+→ Hash password (bcrypt, 12 rounds)
+→ Create User
+→ Return { accessToken, refreshToken }
+```
+
+### Login
+```
+POST /auth/login
+Body: { email, password }
+→ Find user by email
+→ Compare bcrypt hash
+→ If active: generate tokens, store refresh token hash in DB
+→ Return { accessToken, refreshToken, user }
+```
+
+### Refresh
+```
+POST /auth/refresh
+Body: { refreshToken }
+→ Verify JWT signature + expiry
+→ Check jti exists in RefreshToken table and not revoked
+→ Issue new access token (and optionally rotate refresh token)
+→ Return { accessToken }
+```
+
+### Logout
+```
+POST /auth/logout
+Headers: Authorization: Bearer {accessToken}
+→ Invalidate refresh token in DB (delete record)
+→ Client discards both tokens
+```
+
+## Customer Auth (Optional)
+
+Customers are per-tenant and don't have passwords by default. For order tracking:
+
+```
+POST /customers/auth
+Body: { email, orderId, viewToken }
+→ Verify order belongs to email and viewToken matches
+→ Issue short-lived customer JWT (1 hour)
+→ Allows viewing order history for that email
+```
+
+## Role-Based Access Control (RBAC)
+
+| Role | Scope | Permissions |
+|------|-------|-------------|
+| `superadmin` | Platform | Full access to all tenants and users |
+| `admin` | Tenant | Full CRUD within their tenant |
+| `manager` | Tenant | Read + limited write (products, orders). Cannot delete or manage members. |
+
+Middleware `requireRole(...roles)` checks the JWT role against the route's allowed roles.
+
+## Password Security
+
+- Minimum 8 characters
+- Bcrypt hashing with 12 salt rounds
+- Password reset via secure token (Resend email, 1-hour expiry)
+- `mustChangePassword` flag forces password change on next login
+
+## Token Storage (Backend)
+
+```prisma
+model RefreshToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+```
+
+On logout: delete refresh token record.
+On password change: revoke all refresh tokens for the user.
+
+## Security Headers
+
+All responses include:
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- `Strict-Transport-Security` (in production)

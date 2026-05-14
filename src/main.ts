@@ -1,0 +1,70 @@
+import { NestFactory, Reflector } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import helmet from 'helmet';
+
+import { AppModule } from './app.module';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { TransformInterceptor } from './common/interceptors/transform.interceptor';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { RolesGuard } from './common/guards/roles.guard';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule, {
+    // Disable NestJS built-in logger in production; Winston handles it
+    logger: process.env.NODE_ENV === 'production' ? ['error', 'warn'] : ['log', 'error', 'warn', 'debug'],
+  });
+
+  const config = app.get(ConfigService);
+  const reflector = app.get(Reflector);
+
+  // ---------------------------------------------------------------------------
+  // Security
+  // ---------------------------------------------------------------------------
+  app.use(helmet());
+
+  app.enableCors({
+    origin: config.get<string>('FRONTEND_URL'),
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-id'],
+  });
+
+  // ---------------------------------------------------------------------------
+  // Global prefix
+  // ---------------------------------------------------------------------------
+  app.setGlobalPrefix('api/v1');
+
+  // ---------------------------------------------------------------------------
+  // Global pipes — validate and whitelist all incoming DTOs
+  // ---------------------------------------------------------------------------
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      transformOptions: { enableImplicitConversion: false },
+    }),
+  );
+
+  // ---------------------------------------------------------------------------
+  // Global guards — JWT + Roles enforced on all routes unless @Public()
+  // ---------------------------------------------------------------------------
+  app.useGlobalGuards(new JwtAuthGuard(reflector), new RolesGuard(reflector));
+
+  // ---------------------------------------------------------------------------
+  // Global filters & interceptors
+  // ---------------------------------------------------------------------------
+  app.useGlobalFilters(new HttpExceptionFilter());
+  app.useGlobalInterceptors(new TransformInterceptor());
+
+  // ---------------------------------------------------------------------------
+  // Start
+  // ---------------------------------------------------------------------------
+  const port = config.get<number>('PORT') ?? 3000;
+  await app.listen(port);
+
+  console.log(`Application running on http://localhost:${port}/api/v1`);
+}
+
+bootstrap();
