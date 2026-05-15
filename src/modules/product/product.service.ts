@@ -16,13 +16,21 @@ export class ProductService {
     const pageSize = filter.pageSize ?? 20;
     const skip = (page - 1) * pageSize;
 
+    const filterParams = {
+      tenantId,
+      search: filter.search,
+      status: filter.status,
+      categoryId: filter.categoryId,
+      brandId: filter.brandId,
+      tagId: filter.tagId,
+      minPrice: filter.minPrice,
+      maxPrice: filter.maxPrice,
+      sort: filter.sort,
+    };
+
     const [items, total] = await Promise.all([
-      this.repo.findMany(
-        { tenantId, search: filter.search, status: filter.status, categoryId: filter.categoryId, brandId: filter.brandId, tagId: filter.tagId },
-        skip,
-        pageSize,
-      ),
-      this.repo.count({ tenantId, search: filter.search, status: filter.status, categoryId: filter.categoryId, brandId: filter.brandId, tagId: filter.tagId }),
+      this.repo.findMany(filterParams, skip, pageSize),
+      this.repo.count(filterParams),
     ]);
 
     return serializeList(items, { page, pageSize, total });

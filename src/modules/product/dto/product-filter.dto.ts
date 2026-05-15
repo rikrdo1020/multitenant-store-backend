@@ -1,4 +1,4 @@
-import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsEnum, IsInt, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 import { ProductStatus } from '@prisma/client';
 import { Type } from 'class-transformer';
 
@@ -22,6 +22,22 @@ export class ProductFilterDto {
   @IsOptional()
   @IsString()
   tagId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  minPrice?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  maxPrice?: number;
+
+  @IsOptional()
+  @IsEnum(['price_asc', 'price_desc', 'newest'])
+  sort?: 'price_asc' | 'price_desc' | 'newest';
 
   @IsOptional()
   @IsInt()
