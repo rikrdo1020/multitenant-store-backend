@@ -9,6 +9,9 @@ export interface ProductFilter {
   categoryId?: string;
   brandId?: string;
   tagId?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  sort?: 'price_asc' | 'price_desc' | 'newest';
 }
 
 const PRODUCT_INCLUDE = {
@@ -28,8 +31,14 @@ export class ProductRepository {
       include: PRODUCT_INCLUDE,
       skip,
       take,
-      orderBy: [{ isFeatured: 'desc' }, { featuredOrder: 'asc' }, { createdAt: 'desc' }],
+      orderBy: this.buildOrderBy(filter.sort),
     });
+  }
+
+  private buildOrderBy(sort?: string): Prisma.ProductOrderByWithRelationInput[] {
+    if (sort === 'price_asc') return [{ price: 'asc' }];
+    if (sort === 'price_desc') return [{ price: 'desc' }];
+    return [{ isFeatured: 'desc' }, { featuredOrder: 'asc' }, { createdAt: 'desc' }];
   }
 
   count(filter: ProductFilter): Promise<number> {
@@ -80,6 +89,13 @@ export class ProductRepository {
         { dku: { contains: filter.search, mode: 'insensitive' } },
         { slug: { contains: filter.search, mode: 'insensitive' } },
       ];
+    }
+
+    if (filter.minPrice !== undefined || filter.maxPrice !== undefined) {
+      where.price = {
+        ...(filter.minPrice !== undefined ? { gte: filter.minPrice } : {}),
+        ...(filter.maxPrice !== undefined ? { lte: filter.maxPrice } : {}),
+      };
     }
 
     return where;
