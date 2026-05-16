@@ -62,4 +62,29 @@ export class ResendService {
       `,
     });
   }
+
+  async sendMemberInvite(
+    to: string,
+    inviteUrl: string,
+    tenantName: string,
+    role: string,
+    inviterName?: string | null,
+    fromEmail?: string,
+  ): Promise<void> {
+    const inviterLine = inviterName
+      ? `<p>${inviterName} te invito a colaborar en ${tenantName}.</p>`
+      : `<p>Te invitaron a colaborar en ${tenantName}.</p>`;
+
+    await this.sendEmail({
+      to,
+      subject: `Invitacion para unirte a ${tenantName}`,
+      from: fromEmail,
+      html: `
+        ${inviterLine}
+        <p>Rol asignado: <strong>${role}</strong>.</p>
+        <p><a href="${inviteUrl}">Aceptar invitacion</a></p>
+        <p>Este enlace expira en 7 dias. Si no esperabas esta invitacion, ignora este correo.</p>
+      `,
+    });
+  }
 }

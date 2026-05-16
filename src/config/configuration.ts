@@ -21,6 +21,7 @@ const envSchema = z.object({
 
   FRONTEND_URL: z.string().url().default('http://localhost:5173'),
   PASSWORD_RESET_URL: z.string().min(1).default('multitenant://reset-password'),
+  TEAM_INVITE_URL: z.string().min(1).default('multitenant://invite'),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

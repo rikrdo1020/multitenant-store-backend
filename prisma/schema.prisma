@@ -68,6 +68,7 @@ model User {
   tenants             TenantMember[]
   refreshTokens       RefreshToken[]
   passwordResetTokens PasswordResetToken[]
+  sentMemberInvites   MemberInvitation[] @relation("MemberInvitationInviter")
   ownedTenants        Tenant[]             @relation("TenantOwner")
 }
 
@@ -110,6 +111,7 @@ model Tenant {
   owner          User            @relation("TenantOwner", fields: [ownerId], references: [id])
 
   members         TenantMember[]
+  memberInvites   MemberInvitation[]
   products        Product[]
   categories      Category[]
   brands          Brand[]
@@ -136,6 +138,25 @@ model TenantMember {
   createdAt DateTime @default(now())
 
   @@unique([userId, tenantId])
+}
+
+model MemberInvitation {
+  id              String    @id @default(cuid())
+  tokenHash       String    @unique
+  email           String
+  role            UserRole  @default(manager)
+  tenantId        String
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invitedByUserId String
+  invitedBy       User      @relation("MemberInvitationInviter", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+  expiresAt       DateTime
+  usedAt          DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([tenantId])
+  @@index([email, tenantId])
+  @@index([expiresAt])
 }
 
 // ---------------------------------------------------------------------------

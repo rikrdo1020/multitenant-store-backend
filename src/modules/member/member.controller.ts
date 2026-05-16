@@ -22,8 +22,12 @@ export class MemberController {
 
   @Post('invite')
   @HttpCode(HttpStatus.CREATED)
-  invite(@CurrentTenant() tenant: Tenant, @Body() dto: InviteMemberDto) {
-    return this.memberService.invite(tenant.id, dto);
+  invite(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentUser() user: { sub: string },
+    @Body() dto: InviteMemberDto,
+  ) {
+    return this.memberService.invite(tenant, user.sub, dto);
   }
 
   @Put(':id/role')
