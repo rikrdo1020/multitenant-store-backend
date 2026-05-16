@@ -11,7 +11,7 @@ export interface ProductFilter {
   tagId?: string;
   minPrice?: number;
   maxPrice?: number;
-  sort?: 'price_asc' | 'price_desc' | 'newest';
+  sort?: 'price_asc' | 'price_desc' | 'newest' | 'name_asc' | 'name_desc';
 }
 
 const PRODUCT_INCLUDE = {
@@ -38,7 +38,9 @@ export class ProductRepository {
   private buildOrderBy(sort?: string): Prisma.ProductOrderByWithRelationInput[] {
     if (sort === 'price_asc') return [{ price: 'asc' }];
     if (sort === 'price_desc') return [{ price: 'desc' }];
-    return [{ isFeatured: 'desc' }, { featuredOrder: 'asc' }, { createdAt: 'desc' }];
+    if (sort === 'name_asc') return [{ name: 'asc' }];
+    if (sort === 'name_desc') return [{ name: 'desc' }];
+    return [{ name: 'asc' }];
   }
 
   count(filter: ProductFilter): Promise<number> {
