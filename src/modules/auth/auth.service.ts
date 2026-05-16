@@ -13,6 +13,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { ResendService } from '../../lib/resend/resend.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { RegisterInviteDto } from './dto/register-invite.dto';
 import * as bcrypt from 'bcryptjs';
 import { UserRole } from '@prisma/client';
 import { JwtPayload } from './strategies/jwt.strategy';
@@ -258,6 +259,121 @@ export class AuthService {
   }
 
   // ---------------------------------------------------------------------------
+  // Team invitation registration
+  // ---------------------------------------------------------------------------
+
+  async verifyInvite(token: string) {
+    const invitation = await this.findUsableInvite(token);
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: invitation.email },
+      select: { id: true },
+    });
+
+    return {
+      email: invitation.email,
+      role: invitation.role,
+      isExistingUser: !!existingUser,
+      expiresAt: invitation.expiresAt,
+      tenant: {
+        documentId: invitation.tenant.id,
+        slug: invitation.tenant.slug,
+        name: invitation.tenant.name,
+        logo: invitation.tenant.logo,
+        description: invitation.tenant.description,
+        primaryColor: invitation.tenant.primaryColor,
+      },
+    };
+  }
+
+  async registerInvite(dto: RegisterInviteDto) {
+    const invitation = await this.findUsableInvite(dto.token);
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: invitation.email },
+      select: { id: true, isActive: true },
+    });
+
+    if (!existingUser && (!dto.name || !dto.password)) {
+      throw new BadRequestException({
+        code: 'INVITE_REGISTRATION_DETAILS_REQUIRED',
+        message: 'Name and password are required for invited users without an existing account',
+      });
+    }
+
+    const passwordHash = existingUser ? undefined : await bcrypt.hash(dto.password!, BCRYPT_ROUNDS);
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.memberInvitation.updateMany({
+        where: { id: invitation.id, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+
+      if (claimed.count !== 1) {
+        throw this.invalidInviteTokenException();
+      }
+
+      let user = await tx.user.findUnique({
+        where: { email: invitation.email },
+        select: { id: true, email: true, name: true, isActive: true },
+      });
+      const usedExistingUser = !!user;
+
+      if (user && !user.isActive) {
+        throw new BadRequestException({
+          code: 'INVITED_USER_INACTIVE',
+          message: 'Invited user account is inactive',
+        });
+      }
+
+      if (!user) {
+        user = await tx.user.create({
+          data: {
+            email: invitation.email,
+            name: dto.name,
+            passwordHash: passwordHash!,
+          },
+          select: { id: true, email: true, name: true, isActive: true },
+        });
+      }
+
+      const existingMember = await tx.tenantMember.findUnique({
+        where: { userId_tenantId: { userId: user.id, tenantId: invitation.tenantId } },
+      });
+      if (existingMember) {
+        throw new ConflictException({
+          code: 'MEMBER_EXISTS',
+          message: 'User is already a member of this tenant',
+        });
+      }
+
+      await tx.tenantMember.create({
+        data: {
+          userId: user.id,
+          tenantId: invitation.tenantId,
+          role: invitation.role,
+        },
+      });
+
+      return { user, usedExistingUser };
+    });
+
+    return {
+      message: 'Invitation accepted.',
+      existingUser: result.usedExistingUser,
+      user: {
+        documentId: result.user.id,
+        email: result.user.email,
+        name: result.user.name,
+        role: invitation.role,
+      },
+      tenant: {
+        documentId: invitation.tenant.id,
+        slug: invitation.tenant.slug,
+        name: invitation.tenant.name,
+      },
+    };
+  }
+
+  // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
 
@@ -307,6 +423,45 @@ export class AuthService {
       code: 'INVALID_RESET_TOKEN',
       message: 'Reset token is invalid',
     });
+  }
+
+  private invalidInviteTokenException(): BadRequestException {
+    return new BadRequestException({
+      code: 'INVALID_INVITE_TOKEN',
+      message: 'Invitation token is invalid',
+    });
+  }
+
+  private async findUsableInvite(token: string) {
+    const tokenHash = this.hashToken(token);
+    const invitation = await this.prisma.memberInvitation.findUnique({
+      where: { tokenHash },
+      include: {
+        tenant: {
+          select: {
+            id: true,
+            slug: true,
+            name: true,
+            logo: true,
+            description: true,
+            primaryColor: true,
+          },
+        },
+      },
+    });
+
+    if (!invitation || invitation.usedAt) {
+      throw this.invalidInviteTokenException();
+    }
+
+    if (invitation.expiresAt < new Date()) {
+      throw new BadRequestException({
+        code: 'EXPIRED_INVITE_TOKEN',
+        message: 'Invitation token has expired',
+      });
+    }
+
+    return invitation;
   }
 
   private async invalidatePasswordResetToken(tokenHash: string): Promise<void> {

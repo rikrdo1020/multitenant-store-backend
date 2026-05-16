@@ -64,6 +64,7 @@ Server starts at `http://localhost:3000`. All routes are prefixed with `/api/v1`
 | `RESEND_FROM_NAME` | Default sender display name for transactional emails |
 | `FRONTEND_URL` | Frontend URL for CORS |
 | `PASSWORD_RESET_URL` | Native deep link base for password reset emails, e.g. `multitenant://reset-password` |
+| `TEAM_INVITE_URL` | Native deep link base for team invitation emails, e.g. `multitenant://invite` |
 | `SEED_SUPERADMIN_EMAIL` | Superadmin email created by seed |
 | `SEED_SUPERADMIN_PASSWORD` | Superadmin password created by seed |
 
