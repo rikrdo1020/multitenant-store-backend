@@ -15,16 +15,19 @@ export class ResendService {
   private readonly logger = new Logger(ResendService.name);
   private readonly client: Resend;
   private readonly defaultFrom: string;
+  private readonly defaultFromName: string;
 
   constructor(private readonly config: ConfigService) {
-    const apiKey = this.config.get<string>('RESEND_API_KEY');
+    const apiKey = this.config.getOrThrow<string>('RESEND_API_KEY');
+    const defaultFromEmail = this.config.getOrThrow<string>('RESEND_FROM_EMAIL');
+    this.defaultFromName = this.config.getOrThrow<string>('RESEND_FROM_NAME');
     this.client = new Resend(apiKey);
-    this.defaultFrom = 'noreply@multitenant-store.com';
+    this.defaultFrom = `${this.defaultFromName} <${defaultFromEmail}>`;
   }
 
   async sendEmail(options: SendEmailOptions): Promise<void> {
     const from = options.from
-      ? `${options.fromName ?? 'Store'} <${options.from}>`
+      ? `${options.fromName ?? this.defaultFromName} <${options.from}>`
       : this.defaultFrom;
 
     try {
@@ -50,12 +53,12 @@ export class ResendService {
   async sendPasswordReset(to: string, resetUrl: string, fromEmail?: string): Promise<void> {
     await this.sendEmail({
       to,
-      subject: 'Reset your password',
+      subject: 'Restablecer tu contrasena',
       from: fromEmail,
       html: `
-        <p>You requested a password reset.</p>
-        <p><a href="${resetUrl}">Click here to reset your password</a></p>
-        <p>This link expires in 1 hour. If you did not request this, ignore this email.</p>
+        <p>Recibimos una solicitud para restablecer tu contrasena.</p>
+        <p><a href="${resetUrl}">Crear nueva contrasena</a></p>
+        <p>Este enlace expira en 1 hora. Si no solicitaste este cambio, ignora este correo.</p>
       `,
     });
   }

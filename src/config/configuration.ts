@@ -15,9 +15,12 @@ const envSchema = z.object({
   CLOUDINARY_API_KEY: z.string().optional(),
   CLOUDINARY_API_SECRET: z.string().optional(),
 
-  RESEND_API_KEY: z.string().optional(),
+  RESEND_API_KEY: z.string().min(1),
+  RESEND_FROM_EMAIL: z.string().email(),
+  RESEND_FROM_NAME: z.string().min(1),
 
   FRONTEND_URL: z.string().url().default('http://localhost:5173'),
+  PASSWORD_RESET_URL: z.string().min(1).default('multitenant://reset-password'),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;
