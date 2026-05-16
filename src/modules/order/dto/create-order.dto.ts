@@ -33,6 +33,10 @@ export class OrderItemDto {
   @IsOptional()
   @IsString()
   imageUrl?: string;
+
+  @IsOptional()
+  @IsObject()
+  selectedOptions?: Record<string, string>;
 }
 
 export class CustomerDataDto {
@@ -47,6 +51,10 @@ export class CustomerDataDto {
   @IsString()
   @IsNotEmpty()
   phone: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
 }
 
 export class CreateOrderDto {
