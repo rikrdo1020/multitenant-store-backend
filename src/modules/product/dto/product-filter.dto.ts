@@ -36,8 +36,8 @@ export class ProductFilterDto {
   maxPrice?: number;
 
   @IsOptional()
-  @IsEnum(['price_asc', 'price_desc', 'newest'])
-  sort?: 'price_asc' | 'price_desc' | 'newest';
+  @IsEnum(['price_asc', 'price_desc', 'newest', 'name_asc', 'name_desc'])
+  sort?: 'price_asc' | 'price_desc' | 'newest' | 'name_asc' | 'name_desc';
 
   @IsOptional()
   @IsInt()

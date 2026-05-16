@@ -18,6 +18,10 @@ export class UploadService {
   constructor(private readonly cloudinary: CloudinaryService) {}
 
   async uploadImage(file: Express.Multer.File, folder?: string): Promise<UploadResult> {
+    if (!file) {
+      throw new BadRequestException({ code: 'NO_FILE', message: 'No file provided' });
+    }
+
     if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
       throw new BadRequestException({
         code: 'INVALID_FILE_TYPE',

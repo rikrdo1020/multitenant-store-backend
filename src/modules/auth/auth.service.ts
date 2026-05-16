@@ -87,15 +87,26 @@ export class AuthService {
     const role = this.deriveHighestRole(user.tenants.map((t) => t.role));
     const primaryTenantId = user.tenants[0]?.tenantId;
 
-    const [accessToken, refreshToken] = await Promise.all([
+    const [accessToken, refreshToken, rawTenant] = await Promise.all([
       this.signAccessToken(user.id, user.email, role, primaryTenantId),
       this.signAndStoreRefreshToken(user.id),
+      primaryTenantId
+        ? this.prisma.tenant.findUnique({
+            where: { id: primaryTenantId },
+            select: { id: true, slug: true, name: true, logo: true, description: true, primaryColor: true },
+          })
+        : Promise.resolve(null),
     ]);
+
+    const tenant = rawTenant
+      ? { documentId: rawTenant.id, slug: rawTenant.slug, name: rawTenant.name, logo: rawTenant.logo, description: rawTenant.description, primaryColor: rawTenant.primaryColor }
+      : null;
 
     return {
       accessToken,
       refreshToken,
       user: { id: user.id, email: user.email, name: user.name, role },
+      tenant,
     };
   }
 
