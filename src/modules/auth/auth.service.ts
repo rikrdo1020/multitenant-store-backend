@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -18,6 +19,8 @@ import { JwtPayload } from './strategies/jwt.strategy';
 import * as crypto from 'crypto';
 
 const BCRYPT_ROUNDS = 12;
+const PASSWORD_RESET_TOKEN_BYTES = 32;
+const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
 
 @Injectable()
 export class AuthService {
@@ -69,7 +72,7 @@ export class AuthService {
     });
 
     if (!user) {
-      // Prevent user enumeration — always hash even on miss
+      // Prevent user enumeration - always hash even on miss.
       await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
       throw new UnauthorizedException({ code: 'INVALID_CREDENTIALS', message: 'Invalid email or password' });
     }
@@ -174,48 +177,84 @@ export class AuthService {
 
   async forgotPassword(email: string): Promise<void> {
     const user = await this.prisma.user.findUnique({ where: { email } });
-    // Do not reveal whether the email exists
-    if (!user) return;
+    if (!user) {
+      throw new NotFoundException({
+        code: 'PASSWORD_RESET_EMAIL_NOT_FOUND',
+        message: 'Email not found',
+      });
+    }
 
-    // We reuse RefreshToken table with a short TTL as a password-reset token store
-    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetToken = crypto.randomBytes(PASSWORD_RESET_TOKEN_BYTES).toString('hex');
     const tokenHash = this.hashToken(resetToken);
 
-    await this.prisma.refreshToken.create({
-      data: {
-        tokenHash,
-        userId: user.id,
-        expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour
-      },
-    });
+    await this.prisma.$transaction([
+      this.prisma.passwordResetToken.updateMany({
+        where: { userId: user.id, usedAt: null },
+        data: { usedAt: new Date() },
+      }),
+      this.prisma.passwordResetToken.create({
+        data: {
+          tokenHash,
+          userId: user.id,
+          expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS),
+        },
+      }),
+    ]);
 
-    const frontendUrl = this.config.get<string>('FRONTEND_URL');
-    const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
+    const resetUrlBase = this.config.getOrThrow<string>('PASSWORD_RESET_URL');
+    const resetUrl = this.buildUrlWithToken(resetUrlBase, resetToken);
 
-    await this.resend.sendPasswordReset(email, resetUrl).catch((err) => {
-      this.logger.error(`Failed to send password reset email to ${email}`, err);
-    });
+    try {
+      await this.resend.sendPasswordReset(email, resetUrl);
+    } catch (error) {
+      await this.invalidatePasswordResetToken(tokenHash);
+      this.logger.error(
+        `Password reset email delivery failed for ${email}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      throw new ServiceUnavailableException({
+        code: 'PASSWORD_RESET_EMAIL_DELIVERY_FAILED',
+        message: 'Password reset email could not be sent',
+      });
+    }
   }
 
   async resetPassword(token: string, newPassword: string): Promise<void> {
     const tokenHash = this.hashToken(token);
-    const stored = await this.prisma.refreshToken.findUnique({ where: { tokenHash } });
+    const stored = await this.prisma.passwordResetToken.findUnique({ where: { tokenHash } });
 
-    if (!stored || stored.expiresAt < new Date()) {
-      throw new BadRequestException({ code: 'INVALID_RESET_TOKEN', message: 'Reset token is invalid or expired' });
+    if (!stored || stored.usedAt) {
+      throw this.invalidResetTokenException();
+    }
+
+    if (stored.expiresAt < new Date()) {
+      throw new BadRequestException({
+        code: 'EXPIRED_RESET_TOKEN',
+        message: 'Reset token has expired',
+      });
     }
 
     const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+    const usedAt = new Date();
 
-    await this.prisma.$transaction([
-      this.prisma.user.update({
+    await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.passwordResetToken.updateMany({
+        where: { id: stored.id, usedAt: null },
+        data: { usedAt },
+      });
+
+      if (claimed.count !== 1) {
+        throw this.invalidResetTokenException();
+      }
+
+      await tx.user.update({
         where: { id: stored.userId },
         data: { passwordHash },
-      }),
-      this.prisma.refreshToken.delete({ where: { id: stored.id } }),
-      // Revoke all other refresh tokens on password change
-      this.prisma.refreshToken.deleteMany({ where: { userId: stored.userId } }),
-    ]);
+      });
+
+      // Revoke active auth sessions on password change.
+      await tx.refreshToken.deleteMany({ where: { userId: stored.userId } });
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -261,6 +300,33 @@ export class AuthService {
 
   private hashToken(token: string): string {
     return crypto.createHash('sha256').update(token).digest('hex');
+  }
+
+  private invalidResetTokenException(): BadRequestException {
+    return new BadRequestException({
+      code: 'INVALID_RESET_TOKEN',
+      message: 'Reset token is invalid',
+    });
+  }
+
+  private async invalidatePasswordResetToken(tokenHash: string): Promise<void> {
+    try {
+      await this.prisma.passwordResetToken.updateMany({
+        where: { tokenHash, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+    } catch (error) {
+      this.logger.error(
+        'Failed to invalidate password reset token after email delivery failure',
+        error instanceof Error ? error.stack : undefined,
+      );
+    }
+  }
+
+  private buildUrlWithToken(baseUrl: string, token: string): string {
+    const url = new URL(baseUrl);
+    url.searchParams.set('token', token);
+    return url.toString();
   }
 
   private deriveHighestRole(roles: UserRole[]): UserRole {

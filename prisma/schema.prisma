@@ -65,9 +65,10 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  tenants       TenantMember[]
-  refreshTokens RefreshToken[]
-  ownedTenants  Tenant[]       @relation("TenantOwner")
+  tenants             TenantMember[]
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  ownedTenants        Tenant[]             @relation("TenantOwner")
 }
 
 model RefreshToken {
@@ -77,6 +78,19 @@ model RefreshToken {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   createdAt DateTime @default(now())
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model Tenant {

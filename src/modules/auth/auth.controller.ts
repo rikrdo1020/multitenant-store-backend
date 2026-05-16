@@ -47,10 +47,10 @@ export class AuthController {
 
   @Public()
   @Post('forgot-password')
-  @HttpCode(HttpStatus.ACCEPTED)
+  @HttpCode(HttpStatus.OK)
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
     await this.authService.forgotPassword(dto.email);
-    return { message: 'If that email exists, a reset link has been sent.' };
+    return { message: 'Password reset email sent.' };
   }
 
   @Public()

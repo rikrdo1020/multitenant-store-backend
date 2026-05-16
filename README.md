@@ -60,7 +60,10 @@ Server starts at `http://localhost:3000`. All routes are prefixed with `/api/v1`
 | `CLOUDINARY_API_KEY` | Cloudinary API key |
 | `CLOUDINARY_API_SECRET` | Cloudinary API secret |
 | `RESEND_API_KEY` | Resend API key |
-| `FRONTEND_URL` | Frontend URL for CORS + password reset links |
+| `RESEND_FROM_EMAIL` | Default verified sender email for transactional emails |
+| `RESEND_FROM_NAME` | Default sender display name for transactional emails |
+| `FRONTEND_URL` | Frontend URL for CORS |
+| `PASSWORD_RESET_URL` | Native deep link base for password reset emails, e.g. `multitenant://reset-password` |
 | `SEED_SUPERADMIN_EMAIL` | Superadmin email created by seed |
 | `SEED_SUPERADMIN_PASSWORD` | Superadmin password created by seed |
 
