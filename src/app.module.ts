@@ -26,6 +26,7 @@ import { SuperadminModule } from './modules/superadmin/superadmin.module';
 import { MarketplaceModule } from './modules/marketplace/marketplace.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { WebhookModule } from './modules/webhook/webhook.module';
+import { PaymentModule } from './modules/payment/payment.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { WebhookModule } from './modules/webhook/webhook.module';
     MarketplaceModule,
     UploadModule,
     WebhookModule,
+    PaymentModule,
   ],
 })
 export class AppModule implements NestModule {

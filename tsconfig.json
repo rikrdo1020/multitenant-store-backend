@@ -15,6 +15,9 @@
     "noImplicitAny": false,
     "strictBindCallApply": false,
     "forceConsistentCasingInFileNames": false,
-    "noFallthroughCasesInSwitch": false
+    "noFallthroughCasesInSwitch": false,
+    "paths": {
+      "@rikrdo1020/yappy-button/server": ["./node_modules/@rikrdo1020/yappy-button/dist/server/index.d.ts"]
+    }
   }
 } 
