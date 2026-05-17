@@ -1,5 +1,27 @@
-import { IsBoolean, IsNotEmpty, IsNumber, IsObject, IsOptional, IsPositive, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
+import {
+  IsArray,
+  IsBoolean,
+  IsInt,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  IsString,
+  Min,
+  ValidateNested,
+} from 'class-validator';
+
+export class ComboRuleDto {
+  @IsString()
+  @IsNotEmpty()
+  productType: string;
+
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  quantity: number;
+}
 
 export class CreateComboDto {
   @IsString()
@@ -11,8 +33,10 @@ export class CreateComboDto {
   @Type(() => Number)
   price: number;
 
-  @IsObject()
-  rules: Record<string, unknown>;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ComboRuleDto)
+  rules: ComboRuleDto[];
 
   @IsOptional()
   @IsBoolean()
