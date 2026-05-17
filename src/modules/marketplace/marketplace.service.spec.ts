@@ -47,8 +47,8 @@ describe('MarketplaceService', () => {
 
       const result = await service.listStores(1, 20);
 
-      expect(result.data).toHaveLength(1);
-      expect(result.data[0]).toMatchObject({ documentId: 'tenant_1', slug: 'mi-tienda', name: 'Mi Tienda' });
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0]).toMatchObject({ documentId: 'tenant_1', slug: 'mi-tienda', name: 'Mi Tienda' });
       expect(result.meta).toMatchObject({ page: 1, pageSize: 20, total: 1, totalPages: 1 });
     });
 
@@ -69,7 +69,7 @@ describe('MarketplaceService', () => {
 
       const result = await service.listStores();
 
-      expect(result.data).toHaveLength(0);
+      expect(result.items).toHaveLength(0);
       expect(result.meta.total).toBe(0);
       expect(result.meta.totalPages).toBe(0);
     });
@@ -80,7 +80,7 @@ describe('MarketplaceService', () => {
       prisma.tenant.count.mockResolvedValue(1);
 
       const result = await service.listStores();
-      const store = result.data[0] as { products: { price: unknown }[] };
+      const store = result.items[0] as { products: { price: unknown }[] };
 
       expect(typeof store.products[0].price).toBe('number');
       expect(store.products[0].price).toBe(29.99);
@@ -120,7 +120,7 @@ describe('MarketplaceService', () => {
 
       const result = await service.listStores();
 
-      expect(result.data).toHaveLength(2);
+      expect(result.items).toHaveLength(2);
     });
   });
 });
