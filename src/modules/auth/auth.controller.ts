@@ -1,8 +1,10 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
@@ -11,6 +13,7 @@ import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { RegisterInviteDto } from './dto/register-invite.dto';
 import { Public } from '../../common/decorators/roles.decorator';
 
 @Controller('auth')
@@ -47,10 +50,10 @@ export class AuthController {
 
   @Public()
   @Post('forgot-password')
-  @HttpCode(HttpStatus.ACCEPTED)
+  @HttpCode(HttpStatus.OK)
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
     await this.authService.forgotPassword(dto.email);
-    return { message: 'If that email exists, a reset link has been sent.' };
+    return { message: 'Password reset email sent.' };
   }
 
   @Public()
@@ -59,5 +62,19 @@ export class AuthController {
   async resetPassword(@Body() dto: ResetPasswordDto) {
     await this.authService.resetPassword(dto.token, dto.password);
     return { message: 'Password updated successfully.' };
+  }
+
+  @Public()
+  @Get('verify-invite/:token')
+  @HttpCode(HttpStatus.OK)
+  verifyInvite(@Param('token') token: string) {
+    return this.authService.verifyInvite(token);
+  }
+
+  @Public()
+  @Post('register-invite')
+  @HttpCode(HttpStatus.CREATED)
+  registerInvite(@Body() dto: RegisterInviteDto) {
+    return this.authService.registerInvite(dto);
   }
 }

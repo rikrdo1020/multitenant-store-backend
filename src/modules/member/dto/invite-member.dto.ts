@@ -1,11 +1,11 @@
-import { IsEmail, IsEnum, IsOptional } from 'class-validator';
+import { IsEmail, IsIn, IsOptional } from 'class-validator';
 import { UserRole } from '@prisma/client';
 
 export class InviteMemberDto {
-  @IsEmail()
+  @IsEmail({}, { message: 'Must be a valid email address' })
   email: string;
 
   @IsOptional()
-  @IsEnum(UserRole)
+  @IsIn([UserRole.admin, UserRole.manager], { message: 'Role must be admin or manager' })
   role?: UserRole;
 }
