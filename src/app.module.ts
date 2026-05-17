@@ -23,6 +23,7 @@ import { ComboModule } from './modules/combo/combo.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { MemberModule } from './modules/member/member.module';
 import { SuperadminModule } from './modules/superadmin/superadmin.module';
+import { MarketplaceModule } from './modules/marketplace/marketplace.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { WebhookModule } from './modules/webhook/webhook.module';
 
@@ -52,6 +53,7 @@ import { WebhookModule } from './modules/webhook/webhook.module';
     SettingsModule,
     MemberModule,
     SuperadminModule,
+    MarketplaceModule,
     UploadModule,
     WebhookModule,
   ],
