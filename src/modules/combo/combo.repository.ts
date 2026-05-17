@@ -25,4 +25,12 @@ export class ComboRepository {
   delete(id: string): Promise<Combo> {
     return this.prisma.combo.delete({ where: { id } });
   }
+
+  async isProductTypeUsed(slug: string, tenantId: string): Promise<boolean> {
+    const combos = await this.prisma.combo.findMany({ where: { tenantId }, select: { rules: true } });
+    return combos.some((c) => {
+      const rules = c.rules as { productType: string }[];
+      return Array.isArray(rules) && rules.some((r) => r.productType === slug);
+    });
+  }
 }

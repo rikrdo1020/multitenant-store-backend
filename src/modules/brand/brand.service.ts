@@ -1,7 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { BrandRepository } from './brand.repository';
 import { CreateBrandDto } from './dto/create-brand.dto';
 import { serialize } from '../../common/utils/serializer';
+import { slugify } from '../../common/utils/slugify';
 
 @Injectable()
 export class BrandService {
@@ -19,11 +20,16 @@ export class BrandService {
   }
 
   async create(tenantId: string, dto: CreateBrandDto) {
-    const existing = await this.repo.findBySlug(dto.slug, tenantId);
-    if (existing) throw new ConflictException({ code: 'SLUG_TAKEN', message: `Brand slug '${dto.slug}' already exists` });
-
-    const brand = await this.repo.create({ ...dto, tenant: { connect: { id: tenantId } } });
+    const slug = await this.resolveSlug(dto.slug ?? slugify(dto.name), tenantId);
+    const brand = await this.repo.create({ ...dto, slug, tenant: { connect: { id: tenantId } } });
     return serialize(brand);
+  }
+
+  private async resolveSlug(base: string, tenantId: string): Promise<string> {
+    if (!(await this.repo.findBySlug(base, tenantId))) return base;
+    let i = 2;
+    while (await this.repo.findBySlug(`${base}-${i}`, tenantId)) i++;
+    return `${base}-${i}`;
   }
 
   async update(id: string, tenantId: string, dto: Partial<CreateBrandDto>) {

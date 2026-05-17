@@ -6,5 +6,6 @@ import { ComboRepository } from './combo.repository';
 @Module({
   controllers: [ComboController],
   providers: [ComboService, ComboRepository],
+  exports: [ComboRepository],
 })
 export class ComboModule {}
