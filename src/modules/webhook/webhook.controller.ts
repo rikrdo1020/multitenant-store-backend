@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   Get,
-  Headers,
   HttpCode,
   HttpStatus,
   Post,
@@ -28,10 +27,6 @@ export class WebhookController {
     return { received: true };
   }
 
-  /**
-   * Yappy sends GET callbacks (not POST) with orderId, status, domain, hash query params.
-   * Hash is validated via HMAC-SHA256 before updating the order status.
-   */
   @Public()
   @Get('yappy')
   @HttpCode(HttpStatus.OK)
@@ -40,9 +35,27 @@ export class WebhookController {
     @Query('status') status: string,
     @Query('domain') domain: string,
     @Query('hash') hash: string,
-    @CurrentTenant() tenant: Tenant,
   ) {
-    await this.webhookService.handleYappy({ orderId, status, domain, hash }, tenant.id);
+    await this.webhookService.handleYappy({ orderId, status, domain, hash });
+    return 'OK';
+  }
+}
+
+// Yappy SDK hardcodes ipnUrl as `${siteUrl}/api/payments/yappy/webhook` — no global prefix.
+@Controller('api/payments/yappy')
+export class YappyIpnController {
+  constructor(private readonly webhookService: WebhookService) {}
+
+  @Public()
+  @Get('webhook')
+  @HttpCode(HttpStatus.OK)
+  async yappyIpn(
+    @Query('orderId') orderId: string,
+    @Query('status') status: string,
+    @Query('domain') domain: string,
+    @Query('hash') hash: string,
+  ) {
+    await this.webhookService.handleYappy({ orderId, status, domain, hash });
     return 'OK';
   }
 }

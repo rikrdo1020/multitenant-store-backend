@@ -19,9 +19,26 @@ const envSchema = z.object({
   RESEND_FROM_EMAIL: z.string().email(),
   RESEND_FROM_NAME: z.string().min(1),
 
-  FRONTEND_URL: z.string().url().default('http://localhost:5173'),
+  APP_DOMAIN: z.string().optional(),
+
+  FRONTEND_URL: z
+    .string()
+    .refine(
+      (val) => val.split(',').every((u) => {
+        try { new URL(u.trim()); return true; } catch { return false; }
+      }),
+      { message: 'Must be a valid URL or comma-separated list of valid URLs' },
+    )
+    .default('http://localhost:5173'),
   PASSWORD_RESET_URL: z.string().min(1).default('multitenant://reset-password'),
   TEAM_INVITE_URL: z.string().min(1).default('multitenant://invite'),
+
+  YAPPY_MOCK: z.string().optional(),
+  YAPPY_MERCHANT_ID: z.string().optional(),
+  YAPPY_SECRET_KEY: z.string().optional(),
+  YAPPY_URL_DOMAIN: z.string().optional(),
+  YAPPY_API_URL: z.string().optional(),
+  YAPPY_SITE_URL: z.string().optional(),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;
