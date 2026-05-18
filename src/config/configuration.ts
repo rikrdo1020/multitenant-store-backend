@@ -19,6 +19,8 @@ const envSchema = z.object({
   RESEND_FROM_EMAIL: z.string().email(),
   RESEND_FROM_NAME: z.string().min(1),
 
+  APP_DOMAIN: z.string().optional(),
+
   FRONTEND_URL: z
     .string()
     .refine(

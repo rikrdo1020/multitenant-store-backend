@@ -42,14 +42,12 @@ export class TenantMiddleware implements NestMiddleware {
     const query = req.query['tenant'];
     if (query && typeof query === 'string') return query;
 
-    // 3. Subdomain: e.g. "my-store.api.example.com" → "my-store"
+    // 3. Subdomain: only when host ends with APP_DOMAIN (e.g. "my-store.myapp.com")
+    const appDomain = process.env.APP_DOMAIN;
     const host = req.hostname;
-    if (host) {
-      const parts = host.split('.');
-      // Treat as subdomain only when there are at least 3 parts (subdomain.domain.tld)
-      if (parts.length >= 3 && parts[0] !== 'www') {
-        return parts[0];
-      }
+    if (appDomain && host && host.endsWith(`.${appDomain}`)) {
+      const subdomain = host.slice(0, host.length - appDomain.length - 1);
+      if (subdomain && subdomain !== 'www') return subdomain;
     }
 
     return null;
