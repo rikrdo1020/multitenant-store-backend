@@ -50,8 +50,8 @@ export class YappyProvider implements IPaymentProvider {
 
     const result = await createYappyPayment(config, {
       token: merchantResult.token,
-      orderId: params.orderId,
-      aliasYappy: params.aliasYappy ?? '',
+      orderId: params.orderId.replace('ORD-', ''),
+      aliasYappy: (params.aliasYappy ?? '').replace(/-/g, ''),
       total: params.amount,
     });
 
