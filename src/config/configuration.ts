@@ -22,6 +22,13 @@ const envSchema = z.object({
   FRONTEND_URL: z.string().url().default('http://localhost:5173'),
   PASSWORD_RESET_URL: z.string().min(1).default('multitenant://reset-password'),
   TEAM_INVITE_URL: z.string().min(1).default('multitenant://invite'),
+
+  YAPPY_MOCK: z.string().optional(),
+  YAPPY_MERCHANT_ID: z.string().optional(),
+  YAPPY_SECRET_KEY: z.string().optional(),
+  YAPPY_URL_DOMAIN: z.string().optional(),
+  YAPPY_API_URL: z.string().optional(),
+  YAPPY_SITE_URL: z.string().optional(),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;
