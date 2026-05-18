@@ -33,6 +33,8 @@ export class YappyProvider implements IPaymentProvider {
   }
 
   async createPayment(params: CreatePaymentParams): Promise<CreatePaymentResult> {
+    this.logger.log(`createPayment called — orderId: ${params.orderId}, amount: ${params.amount}, aliasYappy: ${params.aliasYappy ?? 'N/A'}`);
+
     if (this.isMock()) {
       this.logger.log(`[MOCK] Yappy payment for order ${params.orderId}`);
       return {
@@ -42,20 +44,42 @@ export class YappyProvider implements IPaymentProvider {
     }
 
     const config = this.buildConfig();
+    this.logger.log(`Config built — merchantId: ${config.merchantId}, urlDomain: ${config.urlDomain}, apiUrl: ${config.apiUrl}`);
 
-    const merchantResult = await validateYappyMerchant(config);
+    this.logger.log(`Validating Yappy merchant...`);
+    let merchantResult: Awaited<ReturnType<typeof validateYappyMerchant>>;
+    try {
+      merchantResult = await validateYappyMerchant(config);
+    } catch (err) {
+      this.logger.error(`validateYappyMerchant threw an exception`, err instanceof Error ? err.stack : String(err));
+      throw err;
+    }
+
+    this.logger.log(`Merchant validation response — success: ${merchantResult.success}, hasToken: ${!!merchantResult.token}`);
     if (!merchantResult.success || !merchantResult.token) {
+      this.logger.error(`Merchant validation failed — full response: ${JSON.stringify(merchantResult)}`);
       throw new BadRequestException('Yappy merchant validation failed');
     }
 
-    const result = await createYappyPayment(config, {
+    const paymentPayload = {
       token: merchantResult.token,
       orderId: params.orderId.replace('ORD-', ''),
       aliasYappy: (params.aliasYappy ?? '').replace(/-/g, ''),
       total: params.amount,
-    });
+    };
+    this.logger.log(`Creating Yappy payment — payload: ${JSON.stringify(paymentPayload)}`);
 
+    let result: Awaited<ReturnType<typeof createYappyPayment>>;
+    try {
+      result = await createYappyPayment(config, paymentPayload);
+    } catch (err) {
+      this.logger.error(`createYappyPayment threw an exception`, err instanceof Error ? err.stack : String(err));
+      throw err;
+    }
+
+    this.logger.log(`createYappyPayment response — success: ${result.success}, raw: ${JSON.stringify(result)}`);
     if (!result.success) {
+      this.logger.error(`Payment creation failed — message: ${result.message}`);
       throw new BadRequestException(result.message ?? 'Yappy payment creation failed');
     }
 
