@@ -77,7 +77,7 @@ export class WebhookService {
       throw new UnauthorizedException('Invalid hash');
     }
 
-    const order = await this.prisma.order.findFirst({ where: { orderId: params.orderId } });
+    const order = await this.prisma.order.findFirst({ where: { orderId: `ORD-${params.orderId}` } });
     if (!order) {
       this.logger.warn(`Yappy webhook: order ${params.orderId} not found`);
       return;
@@ -90,7 +90,7 @@ export class WebhookService {
       data: { orderStatus: mappedStatus },
     });
 
-    this.logger.log(`Yappy webhook: order ${params.orderId} → ${mappedStatus}`);
+    this.logger.log(`Yappy webhook: order ORD-${params.orderId} → ${mappedStatus}`);
   }
 
   private async handlePaymentSucceeded(object: Record<string, unknown>, tenantId: string): Promise<void> {
