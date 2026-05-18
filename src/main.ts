@@ -23,8 +23,17 @@ async function bootstrap() {
   // ---------------------------------------------------------------------------
   app.use(helmet());
 
+  const rawOrigin = config.get<string>('FRONTEND_URL') ?? '';
+  const allowedOrigins = rawOrigin.split(',').map((o) => o.trim()).filter(Boolean);
+
   app.enableCors({
-    origin: config.get<string>('FRONTEND_URL'),
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS blocked: ${origin}`));
+      }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-id'],
