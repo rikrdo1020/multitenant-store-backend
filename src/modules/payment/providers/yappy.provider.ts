@@ -88,6 +88,7 @@ export class YappyProvider implements IPaymentProvider {
     return {
       transactionId: result.transactionId,
       documentName: result.documentName,
+      token: merchantResult.token,
     };
   }
 }

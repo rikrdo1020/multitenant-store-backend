@@ -8,6 +8,7 @@ export interface CreatePaymentParams {
 export interface CreatePaymentResult {
   transactionId?: string;
   documentName?: string;
+  token?: string;
 }
 
 export interface IPaymentProvider {

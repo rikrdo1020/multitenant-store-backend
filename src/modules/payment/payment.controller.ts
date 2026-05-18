@@ -56,6 +56,6 @@ export class PaymentController {
       });
     }
 
-    return { success: true, transactionId: result.transactionId, documentName: result.documentName };
+    return { success: true, transactionId: result.transactionId, documentName: result.documentName, token: result.token };
   }
 }
