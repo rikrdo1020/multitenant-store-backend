@@ -1,5 +1,5 @@
 import { NestFactory, Reflector } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { RequestMethod, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
 
@@ -42,7 +42,9 @@ async function bootstrap() {
   // ---------------------------------------------------------------------------
   // Global prefix
   // ---------------------------------------------------------------------------
-  app.setGlobalPrefix('api/v1');
+  app.setGlobalPrefix('api/v1', {
+    exclude: [{ path: 'api/payments/yappy/webhook', method: RequestMethod.GET }],
+  });
 
   // ---------------------------------------------------------------------------
   // Global pipes — validate and whitelist all incoming DTOs

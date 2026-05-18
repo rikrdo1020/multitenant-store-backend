@@ -68,7 +68,7 @@ export class WebhookService {
     }
   }
 
-  async handleYappy(params: YappyWebhookParams, tenantId: string): Promise<void> {
+  async handleYappy(params: YappyWebhookParams): Promise<void> {
     const secretKey = this.configService.get<string>('YAPPY_SECRET_KEY', '');
 
     const isValid = validateYappyHash(secretKey, params.orderId, params.status, params.domain, params.hash);
@@ -77,10 +77,16 @@ export class WebhookService {
       throw new UnauthorizedException('Invalid hash');
     }
 
+    const order = await this.prisma.order.findFirst({ where: { orderId: params.orderId } });
+    if (!order) {
+      this.logger.warn(`Yappy webhook: order ${params.orderId} not found`);
+      return;
+    }
+
     const mappedStatus = mapYappyStatus(params.status);
 
-    await this.prisma.order.updateMany({
-      where: { orderId: params.orderId, tenantId },
+    await this.prisma.order.update({
+      where: { id: order.id },
       data: { orderStatus: mappedStatus },
     });
 
