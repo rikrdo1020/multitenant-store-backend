@@ -1,7 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { TagRepository } from './tag.repository';
 import { CreateTagDto } from './dto/create-tag.dto';
 import { serialize } from '../../common/utils/serializer';
+import { slugify } from '../../common/utils/slugify';
 
 @Injectable()
 export class TagService {
@@ -18,11 +19,16 @@ export class TagService {
   }
 
   async create(tenantId: string, dto: CreateTagDto) {
-    const existing = await this.repo.findBySlug(dto.slug, tenantId);
-    if (existing) throw new ConflictException({ code: 'SLUG_TAKEN', message: `Tag slug '${dto.slug}' already exists` });
-
-    const tag = await this.repo.create({ ...dto, tenant: { connect: { id: tenantId } } });
+    const slug = await this.resolveSlug(dto.slug ?? slugify(dto.name), tenantId);
+    const tag = await this.repo.create({ ...dto, slug, tenant: { connect: { id: tenantId } } });
     return serialize(tag);
+  }
+
+  private async resolveSlug(base: string, tenantId: string): Promise<string> {
+    if (!(await this.repo.findBySlug(base, tenantId))) return base;
+    let i = 2;
+    while (await this.repo.findBySlug(`${base}-${i}`, tenantId)) i++;
+    return `${base}-${i}`;
   }
 
   async update(id: string, tenantId: string, dto: Partial<CreateTagDto>) {
