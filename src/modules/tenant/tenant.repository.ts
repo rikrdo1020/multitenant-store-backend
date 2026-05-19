@@ -22,6 +22,19 @@ export class TenantRepository {
     });
   }
 
+  findByOwner(ownerId: string): Promise<Tenant[]> {
+    return this.prisma.tenant.findMany({
+      where: { ownerId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  isSlugTaken(slug: string, excludeId?: string): Promise<boolean> {
+    return this.prisma.tenant
+      .findFirst({ where: { slug, ...(excludeId ? { id: { not: excludeId } } : {}) } })
+      .then((t) => t !== null);
+  }
+
   count(): Promise<number> {
     return this.prisma.tenant.count();
   }

@@ -1,10 +1,12 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { Tenant, TenantStatus } from '@prisma/client';
 import { TenantRepository } from './tenant.repository';
+import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { serialize, serializeList } from '../../common/utils/serializer';
 
 export interface CreateTenantInput {
@@ -60,6 +62,36 @@ export class TenantService {
   async updateStatus(id: string, status: TenantStatus) {
     await this.findByIdOrFail(id);
     const updated = await this.repo.updateStatus(id, status);
+    return serialize(updated);
+  }
+
+  async checkSlug(slug: string, excludeId?: string) {
+    const taken = await this.repo.isSlugTaken(slug, excludeId);
+    return { available: !taken };
+  }
+
+  async findByOwner(ownerId: string) {
+    const items = await this.repo.findByOwner(ownerId);
+    return items.map(serialize);
+  }
+
+  async updateProfile(id: string, ownerId: string, dto: UpdateTenantDto) {
+    const tenant = await this.repo.findById(id);
+    if (!tenant) {
+      throw new NotFoundException({ code: 'TENANT_NOT_FOUND', message: 'Tenant not found' });
+    }
+    if (tenant.ownerId !== ownerId) {
+      throw new ForbiddenException({ code: 'FORBIDDEN', message: 'Only the owner can update this store' });
+    }
+
+    if (dto.slug && dto.slug !== tenant.slug) {
+      const existing = await this.repo.findBySlug(dto.slug);
+      if (existing) {
+        throw new ConflictException({ code: 'SLUG_TAKEN', message: `Slug '${dto.slug}' is already taken` });
+      }
+    }
+
+    const updated = await this.repo.update(id, dto);
     return serialize(updated);
   }
 }
