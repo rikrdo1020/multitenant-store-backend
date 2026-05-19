@@ -17,9 +17,11 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles, Public } from '../../common/decorators/roles.decorator';
 import { CurrentTenant } from '../../common/decorators/tenant.decorator';
+import { CurrentUser } from '../../common/decorators/user.decorator';
 import { OrderStatus, UserRole, Tenant } from '@prisma/client';
 import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
 import { Type } from 'class-transformer';
+import type { AuthenticatedOrderUser } from './order.service';
 
 class OrderFilterQuery {
   @IsOptional() @IsEnum(OrderStatus) status?: OrderStatus;
@@ -48,19 +50,25 @@ export class OrderController {
     return this.orderService.findByOrderId(orderId, tenant.id);
   }
 
-  // Admin
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.admin, UserRole.manager, UserRole.superadmin)
+  // Storefront account + admin order list. Service applies tenant membership/customer-email scoping.
+  @UseGuards(JwtAuthGuard)
   @Get()
-  findAll(@CurrentTenant() tenant: Tenant, @Query() filter: OrderFilterQuery) {
-    return this.orderService.findAll(tenant.id, filter);
+  findAll(
+    @CurrentTenant() tenant: Tenant,
+    @CurrentUser() user: AuthenticatedOrderUser,
+    @Query() filter: OrderFilterQuery,
+  ) {
+    return this.orderService.findAllForUser(tenant.id, user, filter);
   }
 
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.admin, UserRole.manager, UserRole.superadmin)
+  @UseGuards(JwtAuthGuard)
   @Get(':id')
-  findOne(@Param('id') id: string, @CurrentTenant() tenant: Tenant) {
-    return this.orderService.findById(id, tenant.id);
+  findOne(
+    @Param('id') id: string,
+    @CurrentTenant() tenant: Tenant,
+    @CurrentUser() user: AuthenticatedOrderUser,
+  ) {
+    return this.orderService.findByIdForUser(id, tenant.id, user);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -69,8 +77,9 @@ export class OrderController {
   updateStatus(
     @Param('id') id: string,
     @CurrentTenant() tenant: Tenant,
+    @CurrentUser() user: AuthenticatedOrderUser,
     @Body() dto: UpdateOrderStatusDto,
   ) {
-    return this.orderService.updateStatus(id, tenant.id, dto);
+    return this.orderService.updateStatusForUser(id, tenant.id, user, dto);
   }
 }
