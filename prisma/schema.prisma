@@ -176,11 +176,31 @@ model Customer {
   tenantId String
   tenant   Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   orders   Order[]
+  addresses CustomerAddress[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([email, tenantId])
+}
+
+model CustomerAddress {
+  id         String  @id @default(cuid())
+  name       String
+  address    String
+  city       String
+  department String
+  phone      String
+  isDefault  Boolean @default(false)
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([customerId, isDefault])
 }
 
 // ---------------------------------------------------------------------------
