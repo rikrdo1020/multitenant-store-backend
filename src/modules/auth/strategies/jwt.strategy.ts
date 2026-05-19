@@ -1,7 +1,8 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
+import { Request } from 'express';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { UserRole } from '@prisma/client';
 
@@ -25,10 +26,11 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       secretOrKey: config.get<string>('JWT_ACCESS_SECRET'),
+      passReqToCallback: true,
     });
   }
 
-  async validate(payload: JwtPayload): Promise<JwtPayload> {
+  async validate(req: Request, payload: JwtPayload): Promise<JwtPayload> {
     if (payload.type !== 'access') {
       throw new UnauthorizedException({ code: 'INVALID_TOKEN_TYPE', message: 'Not an access token' });
     }
@@ -42,6 +44,29 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       throw new UnauthorizedException({ code: 'ACCOUNT_INACTIVE', message: 'Account is inactive or not found' });
     }
 
-    return payload;
+    const tenant = req.tenant;
+
+    // No tenant in request (auth routes, superadmin panel, etc.) — pass through
+    if (!tenant) {
+      return payload;
+    }
+
+    // Superadmin users can access any tenant without a membership record
+    if (payload.role === UserRole.superadmin) {
+      return { ...payload, tenantId: tenant.id };
+    }
+
+    // For all other users, verify actual TenantMember record exists for this tenant
+    const membership = await this.prisma.tenantMember.findUnique({
+      where: { userId_tenantId: { userId: payload.sub, tenantId: tenant.id } },
+      select: { role: true },
+    });
+
+    if (!membership) {
+      throw new ForbiddenException({ code: 'NOT_A_TENANT_MEMBER', message: 'You are not a member of this tenant' });
+    }
+
+    // Override role with the actual role for this tenant (not the global JWT claim)
+    return { ...payload, role: membership.role, tenantId: tenant.id };
   }
 }
