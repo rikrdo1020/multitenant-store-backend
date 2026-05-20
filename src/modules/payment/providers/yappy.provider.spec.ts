@@ -102,7 +102,12 @@ describe('YappyProvider', () => {
       expect(result.documentName).toBe('DOC-XYZ');
       expect(mockCreatePayment).toHaveBeenCalledWith(
         expect.objectContaining({ merchantId: 'merchant-123' }),
-        expect.objectContaining({ orderId: 'ORD-001', aliasYappy: '6789-1234', total: 50 }),
+        expect.objectContaining({
+          token: 'tok-xyz',
+          orderId: '001',
+          aliasYappy: '67891234',
+          total: 50,
+        }),
       );
     });
 
