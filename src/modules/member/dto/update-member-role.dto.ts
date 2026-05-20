@@ -1,7 +1,7 @@
-import { IsEnum } from 'class-validator';
+import { IsIn } from 'class-validator';
 import { UserRole } from '@prisma/client';
 
 export class UpdateMemberRoleDto {
-  @IsEnum(UserRole)
+  @IsIn([UserRole.admin, UserRole.manager], { message: 'Role must be admin or manager' })
   role: UserRole;
 }

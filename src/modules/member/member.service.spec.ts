@@ -23,6 +23,7 @@ describe('MemberService invitations', () => {
     memberInvitation: {
       updateMany: vi.fn(),
       create: vi.fn(),
+      findMany: vi.fn(),
     },
     $transaction: vi.fn(),
   };
@@ -133,5 +134,52 @@ describe('MemberService invitations', () => {
       where: { id: 'invite-1', usedAt: null },
       data: { usedAt: expect.any(Date) },
     });
+  });
+
+  it('GIVEN pending invites WHEN listing invitations SHOULD filter by tenant and active expiry', async () => {
+    const createdAt = new Date('2026-05-20T12:00:00.000Z');
+    const expiresAt = new Date('2026-05-27T12:00:00.000Z');
+    prisma.memberInvitation.findMany.mockResolvedValue([
+      {
+        id: 'invite-1',
+        email: 'pending@example.com',
+        role: UserRole.manager,
+        tenantId: 'tenant-1',
+        expiresAt,
+        usedAt: null,
+        createdAt,
+      },
+    ]);
+
+    const invitations = await service.findPendingInvitations('tenant-1');
+
+    expect(prisma.memberInvitation.findMany).toHaveBeenCalledWith({
+      where: {
+        tenantId: 'tenant-1',
+        usedAt: null,
+        expiresAt: { gt: expect.any(Date) },
+      },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        tenantId: true,
+        expiresAt: true,
+        usedAt: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(invitations).toEqual([
+      {
+        documentId: 'invite-1',
+        email: 'pending@example.com',
+        role: UserRole.manager,
+        tenantId: 'tenant-1',
+        expiresAt: expiresAt.toISOString(),
+        usedAt: null,
+        createdAt: createdAt.toISOString(),
+      },
+    ]);
   });
 });

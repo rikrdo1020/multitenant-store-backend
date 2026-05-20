@@ -20,6 +20,11 @@ export class MemberController {
     return this.memberService.findAll(tenant.id);
   }
 
+  @Get('invitations')
+  findPendingInvitations(@CurrentTenant() tenant: Tenant) {
+    return this.memberService.findPendingInvitations(tenant.id);
+  }
+
   @Post('invite')
   @HttpCode(HttpStatus.CREATED)
   invite(
