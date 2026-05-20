@@ -21,6 +21,8 @@ function makeConfigService(secretKey = SECRET_KEY) {
 function makePrisma() {
   return {
     order: {
+      findFirst: vi.fn().mockResolvedValue({ id: 'order-db-id' }),
+      update: vi.fn().mockResolvedValue({}),
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
   } as any;
@@ -41,56 +43,57 @@ describe('WebhookService — handleYappy', () => {
       service.handleYappy({ orderId: 'ORD-1', status: 'E', domain: 'test.com', hash: 'badhash' }, TENANT_ID),
     ).rejects.toThrow(UnauthorizedException);
 
-    expect(prisma.order.updateMany).not.toHaveBeenCalled();
+    expect(prisma.order.update).not.toHaveBeenCalled();
   });
 
   it('updates order status to paid for status "E"', async () => {
-    const hash = makeHash('ORD-1', 'E', 'test.com');
+    const hash = makeHash('1', 'E', 'test.com');
 
-    await service.handleYappy({ orderId: 'ORD-1', status: 'E', domain: 'test.com', hash }, TENANT_ID);
+    await service.handleYappy({ orderId: '1', status: 'E', domain: 'test.com', hash }, TENANT_ID);
 
-    expect(prisma.order.updateMany).toHaveBeenCalledWith({
-      where: { orderId: 'ORD-1', tenantId: TENANT_ID },
+    expect(prisma.order.findFirst).toHaveBeenCalledWith({ where: { orderId: 'ORD-1' } });
+    expect(prisma.order.update).toHaveBeenCalledWith({
+      where: { id: 'order-db-id' },
       data: { orderStatus: OrderStatus.paid },
     });
   });
 
   it('updates order status to rejected for status "R"', async () => {
-    const hash = makeHash('ORD-2', 'R', 'test.com');
+    const hash = makeHash('2', 'R', 'test.com');
 
-    await service.handleYappy({ orderId: 'ORD-2', status: 'R', domain: 'test.com', hash }, TENANT_ID);
+    await service.handleYappy({ orderId: '2', status: 'R', domain: 'test.com', hash }, TENANT_ID);
 
-    expect(prisma.order.updateMany).toHaveBeenCalledWith(
+    expect(prisma.order.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { orderStatus: OrderStatus.rejected } }),
     );
   });
 
   it('updates order status to cancelled for status "C"', async () => {
-    const hash = makeHash('ORD-3', 'C', 'test.com');
+    const hash = makeHash('3', 'C', 'test.com');
 
-    await service.handleYappy({ orderId: 'ORD-3', status: 'C', domain: 'test.com', hash }, TENANT_ID);
+    await service.handleYappy({ orderId: '3', status: 'C', domain: 'test.com', hash }, TENANT_ID);
 
-    expect(prisma.order.updateMany).toHaveBeenCalledWith(
+    expect(prisma.order.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { orderStatus: OrderStatus.cancelled } }),
     );
   });
 
   it('updates order status to expired for status "X"', async () => {
-    const hash = makeHash('ORD-4', 'X', 'test.com');
+    const hash = makeHash('4', 'X', 'test.com');
 
-    await service.handleYappy({ orderId: 'ORD-4', status: 'X', domain: 'test.com', hash }, TENANT_ID);
+    await service.handleYappy({ orderId: '4', status: 'X', domain: 'test.com', hash }, TENANT_ID);
 
-    expect(prisma.order.updateMany).toHaveBeenCalledWith(
+    expect(prisma.order.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { orderStatus: OrderStatus.expired } }),
     );
   });
 
   it('falls back to pending for unknown status code', async () => {
-    const hash = makeHash('ORD-5', 'Z', 'test.com');
+    const hash = makeHash('5', 'Z', 'test.com');
 
-    await service.handleYappy({ orderId: 'ORD-5', status: 'Z', domain: 'test.com', hash }, TENANT_ID);
+    await service.handleYappy({ orderId: '5', status: 'Z', domain: 'test.com', hash }, TENANT_ID);
 
-    expect(prisma.order.updateMany).toHaveBeenCalledWith(
+    expect(prisma.order.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { orderStatus: OrderStatus.pending } }),
     );
   });
