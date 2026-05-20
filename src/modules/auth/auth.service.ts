@@ -488,6 +488,6 @@ export class AuthService {
     if (roles.includes(UserRole.superadmin)) return UserRole.superadmin;
     if (roles.includes(UserRole.admin)) return UserRole.admin;
     if (roles.includes(UserRole.manager)) return UserRole.manager;
-    return UserRole.admin;
+    return UserRole.manager;
   }
 }
