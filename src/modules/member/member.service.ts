@@ -37,6 +37,28 @@ export class MemberService {
     return members.map(serialize);
   }
 
+  async findPendingInvitations(tenantId: string) {
+    const invitations = await this.prisma.memberInvitation.findMany({
+      where: {
+        tenantId,
+        usedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        tenantId: true,
+        expiresAt: true,
+        usedAt: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return invitations.map(serialize);
+  }
+
   async invite(
     tenant: { id: string; name: string },
     invitedByUserId: string,
