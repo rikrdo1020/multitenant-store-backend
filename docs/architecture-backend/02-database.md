@@ -22,6 +22,7 @@ email         String    @unique
 passwordHash  String    // bcrypt
 name          String?
 phone         String?
+role          UserRole  @default(manager)
 isActive      Boolean   @default(true)
 createdAt     DateTime  @default(now())
 updatedAt     DateTime  @updatedAt
@@ -30,6 +31,7 @@ updatedAt     DateTime  @updatedAt
 tenants       TenantMember[]
 ```
 > Users are platform-level accounts. A user can own or manage multiple tenants.
+> `role=superadmin` is platform-wide. Tenant admin/manager permissions are still resolved through `TenantMember`.
 
 ### Tenant (Store)
 ```prisma

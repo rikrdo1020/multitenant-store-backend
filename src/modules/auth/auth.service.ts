@@ -87,8 +87,7 @@ export class AuthService {
       throw new UnauthorizedException({ code: 'ACCOUNT_INACTIVE', message: 'Account is deactivated' });
     }
 
-    // Derive the highest role across all tenants (superadmin wins)
-    const role = this.deriveHighestRole(user.tenants.map((t) => t.role));
+    const role = this.resolveEffectiveRole(user.role, user.tenants.map((t) => t.role));
     const primaryTenantId = user.tenants[0]?.tenantId;
 
     const [accessToken, refreshToken, rawTenant] = await Promise.all([
@@ -152,7 +151,7 @@ export class AuthService {
       throw new UnauthorizedException({ code: 'ACCOUNT_INACTIVE', message: 'Account inactive' });
     }
 
-    const role = this.deriveHighestRole(user.tenants.map((t) => t.role));
+    const role = this.resolveEffectiveRole(user.role, user.tenants.map((t) => t.role));
     const primaryTenantId = user.tenants[0]?.tenantId;
 
     const [accessToken, newRefreshToken] = await Promise.all([
@@ -489,5 +488,10 @@ export class AuthService {
     if (roles.includes(UserRole.admin)) return UserRole.admin;
     if (roles.includes(UserRole.manager)) return UserRole.manager;
     return UserRole.manager;
+  }
+
+  private resolveEffectiveRole(userRole: UserRole, tenantRoles: UserRole[]): UserRole {
+    if (userRole === UserRole.superadmin) return UserRole.superadmin;
+    return this.deriveHighestRole(tenantRoles);
   }
 }

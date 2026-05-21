@@ -51,6 +51,10 @@ export class CreateShippingMethodDto {
   disclaimer?: string;
 
   @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ShippingLocationDto)

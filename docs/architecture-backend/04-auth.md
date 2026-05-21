@@ -88,6 +88,7 @@ Body: { email, orderId, viewToken }
 | `manager` | Tenant | Read + limited write (products, orders). Cannot delete or manage members. |
 
 Middleware `requireRole(...roles)` checks the JWT role against the route's allowed roles.
+The JWT role is derived from `User.role` only for platform `superadmin`; tenant `admin` and `manager` roles are resolved from `TenantMember`.
 
 ## Password Security
 

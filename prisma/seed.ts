@@ -3,8 +3,12 @@ import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+function log(message: string) {
+  process.stdout.write(`${message}\n`);
+}
+
 async function main() {
-  console.log('Seeding database...');
+  log('Seeding database...');
 
   // ---------------------------------------------------------------------------
   // Superadmin — no tenant, no TenantMember
@@ -14,16 +18,17 @@ async function main() {
 
   const superadmin = await prisma.user.upsert({
     where: { email: superadminEmail },
-    update: {},
+    update: { role: UserRole.superadmin, isActive: true },
     create: {
       email: superadminEmail,
       passwordHash: await bcrypt.hash(superadminPassword, 12),
       name: 'Super Admin',
+      role: UserRole.superadmin,
       isActive: true,
     },
   });
 
-  console.log(`Superadmin created: ${superadmin.email}`);
+  log(`Superadmin created: ${superadmin.email}`);
 
   // ---------------------------------------------------------------------------
   // Tenant owner user
@@ -42,7 +47,7 @@ async function main() {
     },
   });
 
-  console.log(`Admin user created: ${adminUser.email}`);
+  log(`Admin user created: ${adminUser.email}`);
 
   // ---------------------------------------------------------------------------
   // Tenant 1 — Demo Store
@@ -158,7 +163,7 @@ async function main() {
     },
   });
 
-  console.log(`Fashion admin created: ${fashionAdmin.email}`);
+  log(`Fashion admin created: ${fashionAdmin.email}`);
 
   await seedTenant({
     slug: 'fashion-hub',
@@ -253,7 +258,7 @@ async function main() {
     ],
   });
 
-  console.log('Seed complete.');
+  log('Seed complete.');
 }
 
 // ---------------------------------------------------------------------------
@@ -312,7 +317,7 @@ async function seedTenant(input: SeedTenantInput) {
     },
   });
 
-  console.log(`Tenant created: ${tenant.slug}`);
+  log(`Tenant created: ${tenant.slug}`);
 
   await prisma.tenantMember.upsert({
     where: { userId_tenantId: { userId: input.adminUserId, tenantId: tenant.id } },
@@ -438,7 +443,7 @@ async function seedTenant(input: SeedTenantInput) {
     });
   }
 
-  console.log(`Seeded tenant data: ${tenant.slug}`);
+  log(`Seeded tenant data: ${tenant.slug}`);
 }
 
 main()
