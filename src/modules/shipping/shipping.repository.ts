@@ -10,16 +10,26 @@ const SHIPPING_INCLUDE = {
 export class ShippingRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  findAll(tenantId: string) {
+  findAll(tenantId: string, includeInactive = false) {
     return this.prisma.shippingMethod.findMany({
-      where: { tenantId },
+      where: {
+        tenantId,
+        ...(includeInactive ? {} : { isActive: true }),
+      },
       include: SHIPPING_INCLUDE,
       orderBy: { createdAt: 'asc' },
     });
   }
 
-  findById(id: string, tenantId: string) {
-    return this.prisma.shippingMethod.findFirst({ where: { id, tenantId }, include: SHIPPING_INCLUDE });
+  findById(id: string, tenantId: string, includeInactive = false) {
+    return this.prisma.shippingMethod.findFirst({
+      where: {
+        id,
+        tenantId,
+        ...(includeInactive ? {} : { isActive: true }),
+      },
+      include: SHIPPING_INCLUDE,
+    });
   }
 
   create(data: Prisma.ShippingMethodCreateInput): Promise<ShippingMethod> {

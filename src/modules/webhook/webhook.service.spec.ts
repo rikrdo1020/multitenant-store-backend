@@ -40,7 +40,7 @@ describe('WebhookService — handleYappy', () => {
 
   it('throws UnauthorizedException when hash is invalid', async () => {
     await expect(
-      service.handleYappy({ orderId: 'ORD-1', status: 'E', domain: 'test.com', hash: 'badhash' }, TENANT_ID),
+      service.handleYappy({ orderId: 'ORD-1', status: 'E', domain: 'test.com', hash: 'badhash' }),
     ).rejects.toThrow(UnauthorizedException);
 
     expect(prisma.order.update).not.toHaveBeenCalled();
@@ -49,7 +49,7 @@ describe('WebhookService — handleYappy', () => {
   it('updates order status to paid for status "E"', async () => {
     const hash = makeHash('1', 'E', 'test.com');
 
-    await service.handleYappy({ orderId: '1', status: 'E', domain: 'test.com', hash }, TENANT_ID);
+    await service.handleYappy({ orderId: '1', status: 'E', domain: 'test.com', hash });
 
     expect(prisma.order.findFirst).toHaveBeenCalledWith({ where: { orderId: 'ORD-1' } });
     expect(prisma.order.update).toHaveBeenCalledWith({
@@ -61,7 +61,7 @@ describe('WebhookService — handleYappy', () => {
   it('updates order status to rejected for status "R"', async () => {
     const hash = makeHash('2', 'R', 'test.com');
 
-    await service.handleYappy({ orderId: '2', status: 'R', domain: 'test.com', hash }, TENANT_ID);
+    await service.handleYappy({ orderId: '2', status: 'R', domain: 'test.com', hash });
 
     expect(prisma.order.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { orderStatus: OrderStatus.rejected } }),
@@ -71,7 +71,7 @@ describe('WebhookService — handleYappy', () => {
   it('updates order status to cancelled for status "C"', async () => {
     const hash = makeHash('3', 'C', 'test.com');
 
-    await service.handleYappy({ orderId: '3', status: 'C', domain: 'test.com', hash }, TENANT_ID);
+    await service.handleYappy({ orderId: '3', status: 'C', domain: 'test.com', hash });
 
     expect(prisma.order.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { orderStatus: OrderStatus.cancelled } }),
@@ -81,7 +81,7 @@ describe('WebhookService — handleYappy', () => {
   it('updates order status to expired for status "X"', async () => {
     const hash = makeHash('4', 'X', 'test.com');
 
-    await service.handleYappy({ orderId: '4', status: 'X', domain: 'test.com', hash }, TENANT_ID);
+    await service.handleYappy({ orderId: '4', status: 'X', domain: 'test.com', hash });
 
     expect(prisma.order.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { orderStatus: OrderStatus.expired } }),
@@ -91,7 +91,7 @@ describe('WebhookService — handleYappy', () => {
   it('falls back to pending for unknown status code', async () => {
     const hash = makeHash('5', 'Z', 'test.com');
 
-    await service.handleYappy({ orderId: '5', status: 'Z', domain: 'test.com', hash }, TENANT_ID);
+    await service.handleYappy({ orderId: '5', status: 'Z', domain: 'test.com', hash });
 
     expect(prisma.order.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { orderStatus: OrderStatus.pending } }),
