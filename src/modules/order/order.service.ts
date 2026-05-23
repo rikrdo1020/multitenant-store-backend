@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -12,6 +13,10 @@ import { nanoid } from 'nanoid';
 import { OrderIntegrityService } from './order-integrity.service';
 import { OrderStockService } from './order-stock.service';
 import { AuthenticatedOrderUser, OrderListFilter } from './order.types';
+import {
+  generateOrderViewToken,
+  hashOrderViewToken,
+} from './order-view-token';
 
 @Injectable()
 export class OrderService {
@@ -38,7 +43,7 @@ export class OrderService {
       this.repo.count(scopedFilter),
     ]);
 
-    return serializeList(items, { page, pageSize, total });
+    return this.serializeOrderList(items, { page, pageSize, total });
   }
 
   async findAllForUser(
@@ -65,7 +70,7 @@ export class OrderService {
         code: 'ORDER_NOT_FOUND',
         message: 'Order not found',
       });
-    return serialize(order);
+    return this.serializeOrder(order);
   }
 
   async findByIdForUser(
@@ -88,21 +93,37 @@ export class OrderService {
         code: 'ORDER_NOT_FOUND',
         message: 'Order not found',
       });
-    return serialize(order);
+    return this.serializeOrder(order);
   }
 
-  async findByOrderId(orderId: string, tenantId: string) {
-    const order = await this.repo.findByOrderId(orderId, tenantId);
+  async findByOrderIdForTracking(
+    orderId: string,
+    tenantId: string,
+    viewToken?: string,
+  ) {
+    if (!viewToken?.trim()) {
+      throw new BadRequestException({
+        code: 'ORDER_TRACKING_TOKEN_REQUIRED',
+        message: 'Order tracking token is required',
+      });
+    }
+
+    const order = await this.repo.findByOrderIdAndViewTokenHash(
+      orderId,
+      tenantId,
+      hashOrderViewToken(viewToken),
+    );
     if (!order)
       throw new NotFoundException({
         code: 'ORDER_NOT_FOUND',
         message: 'Order not found',
       });
-    return serialize(order);
+    return this.serializeOrder(order);
   }
 
   async create(tenantId: string, dto: CreateOrderDto) {
     const orderId = `ORD-${nanoid(10).toUpperCase()}`;
+    const viewToken = generateOrderViewToken();
     const customerData = {
       ...dto.customerData,
       email: this.normalizeEmail(dto.customerData.email),
@@ -133,6 +154,7 @@ export class OrderService {
         shippingData: trustedOrder.shippingData as any,
         items: trustedOrder.items as any,
         paymentMethod: dto.paymentMethod,
+        viewTokenHash: hashOrderViewToken(viewToken),
         shippingMethodId: trustedOrder.shippingMethodId,
         shippingLocationId: trustedOrder.shippingLocationId,
         tenant: { connect: { id: tenantId } },
@@ -141,7 +163,7 @@ export class OrderService {
       trustedOrder.items,
     );
 
-    return serialize(order);
+    return this.serializeOrder(order, { viewToken });
   }
 
   async updateStatusForUser(
@@ -173,7 +195,7 @@ export class OrderService {
       ...(dto.dispatched !== undefined && { dispatched: dto.dispatched }),
     });
 
-    return serialize(updated);
+    return this.serializeOrder(updated);
   }
 
   private async canManageOrders(
@@ -189,6 +211,34 @@ export class OrderService {
 
   private normalizeEmail(email: string): string {
     return email.trim().toLowerCase();
+  }
+
+  private serializeOrder(
+    order: unknown,
+    extra: Record<string, unknown> = {},
+  ): unknown {
+    return serialize({
+      ...this.omitSensitiveOrderFields(order),
+      ...extra,
+    });
+  }
+
+  private serializeOrderList(
+    items: unknown[],
+    meta: { page: number; pageSize: number; total: number },
+  ) {
+    return serializeList(
+      items.map((item) => this.omitSensitiveOrderFields(item)),
+      meta,
+    );
+  }
+
+  private omitSensitiveOrderFields(order: unknown): Record<string, unknown> {
+    const { viewTokenHash: _viewTokenHash, ...safeOrder } = order as Record<
+      string,
+      unknown
+    >;
+    return safeOrder;
   }
 
   private extractShippingAddress(shippingData: Record<string, unknown>) {

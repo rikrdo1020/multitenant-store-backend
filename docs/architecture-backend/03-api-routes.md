@@ -41,15 +41,15 @@ Customer auth is optional for browsing. Required for order history.
 | GET | `/shipping-methods` | - | Available shipping methods |
 | POST | `/customers` | - | Create customer (guest checkout) |
 | POST | `/orders` | - | Create order + init payment |
-| GET | `/orders/:orderId` | - | View order by orderId (public with viewToken) |
+| GET | `/orders/track/:orderId?token={viewToken}` | - | Public guest order tracking with view token |
 | GET | `/orders/:orderId/status` | - | Poll order payment status |
+| POST | `/payments/yappy/create` | - | Create Yappy payment for `orderId + viewToken` |
 | POST | `/webhooks/:provider` | - | Payment provider webhooks |
 
 ## Customer Auth Routes (JWT `customer`)
 
 | Method | Route | Description |
 |--------|-------|-------------|
-| POST | `/customers/auth` | Authenticate customer by email + order token |
 | GET | `/customers/me` | Get current customer |
 | GET | `/customers/me/orders` | Order history |
 

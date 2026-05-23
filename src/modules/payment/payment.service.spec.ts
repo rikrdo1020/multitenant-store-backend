@@ -5,6 +5,7 @@ import type { IPaymentProvider } from './interfaces/payment-provider.interface';
 import { CashProvider } from './providers/cash.provider';
 import { YappyProvider } from './providers/yappy.provider';
 import { PaymentService } from './payment.service';
+import { hashOrderViewToken } from '../order/order-view-token';
 
 function makeProvider(name: string): IPaymentProvider {
   return {
@@ -79,21 +80,35 @@ describe('PaymentService', () => {
 
   describe('createPaymentForOrder', () => {
     it('throws when order does not exist for tenant', async () => {
-      orders.findByOrderId.mockResolvedValue(null);
+      orders.findByOrderIdAndViewTokenHash.mockResolvedValue(null);
 
       await expect(
         service.createPaymentForOrder(
           'yappy',
-          { orderId: 'MISSING', amount: 50 },
+          { orderId: 'MISSING', amount: 50, viewToken: 'view-token' },
           'tenant-1',
         ),
       ).rejects.toThrow(BadRequestException);
     });
 
+    it('requires the public view token to find the order', async () => {
+      await service.createPaymentForOrder(
+        'yappy',
+        { orderId: 'ORD-001', amount: 1, viewToken: 'view-token' },
+        'tenant-1',
+      );
+
+      expect(orders.findByOrderIdAndViewTokenHash).toHaveBeenCalledWith(
+        'ORD-001',
+        'tenant-1',
+        hashOrderViewToken('view-token'),
+      );
+    });
+
     it('uses persisted order total instead of client amount', async () => {
       await service.createPaymentForOrder(
         'yappy',
-        { orderId: 'ORD-001', amount: 1 },
+        { orderId: 'ORD-001', amount: 1, viewToken: 'view-token' },
         'tenant-1',
       );
 
@@ -110,7 +125,7 @@ describe('PaymentService', () => {
     it('marks cash order paid through stock lifecycle service', async () => {
       await service.createPaymentForOrder(
         'cash',
-        { orderId: 'ORD-001', amount: 75 },
+        { orderId: 'ORD-001', amount: 75, viewToken: 'view-token' },
         'tenant-1',
       );
 
@@ -131,7 +146,7 @@ describe('PaymentService', () => {
 
       await service.createPaymentForOrder(
         'yappy',
-        { orderId: 'ORD-001', amount: 75 },
+        { orderId: 'ORD-001', amount: 75, viewToken: 'view-token' },
         'tenant-1',
       );
 
@@ -149,7 +164,7 @@ describe('PaymentService', () => {
 
 function makeOrderRepository() {
   return {
-    findByOrderId: vi.fn().mockResolvedValue({
+    findByOrderIdAndViewTokenHash: vi.fn().mockResolvedValue({
       id: 'id-1',
       orderId: 'ORD-001',
       total: '75.00',

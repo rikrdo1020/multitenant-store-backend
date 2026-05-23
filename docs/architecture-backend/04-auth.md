@@ -3,6 +3,7 @@
 ## JWT Strategy
 
 Two token types:
+
 - **Access Token**: short-lived (15 min), contains user id, role, tenant context.
 - **Refresh Token**: long-lived (7 days), stored in `RefreshToken` table for revocation.
 
@@ -30,54 +31,54 @@ Two token types:
 ## Auth Flow
 
 ### Register
+
 ```
 POST /auth/register
 Body: { email, password, name }
-→ Validate email uniqueness
-→ Hash password (bcrypt, 12 rounds)
-→ Create User
-→ Return { accessToken, refreshToken }
+-> Validate email uniqueness
+-> Hash password (bcrypt, 12 rounds)
+-> Create User
+-> Return { accessToken, refreshToken }
 ```
 
 ### Login
+
 ```
 POST /auth/login
 Body: { email, password }
-→ Find user by email
-→ Compare bcrypt hash
-→ If active: generate tokens, store refresh token hash in DB
-→ Return { accessToken, refreshToken, user }
+-> Find user by email
+-> Compare bcrypt hash
+-> If active: generate tokens, store refresh token hash in DB
+-> Return { accessToken, refreshToken, user }
 ```
 
 ### Refresh
+
 ```
 POST /auth/refresh
 Body: { refreshToken }
-→ Verify JWT signature + expiry
-→ Check jti exists in RefreshToken table and not revoked
-→ Issue new access token (and optionally rotate refresh token)
-→ Return { accessToken }
+-> Verify JWT signature + expiry
+-> Check jti exists in RefreshToken table and not revoked
+-> Issue new access token (and optionally rotate refresh token)
+-> Return { accessToken }
 ```
 
 ### Logout
+
 ```
 POST /auth/logout
 Headers: Authorization: Bearer {accessToken}
-→ Invalidate refresh token in DB (delete record)
-→ Client discards both tokens
+-> Invalidate refresh token in DB (delete record)
+-> Client discards both tokens
 ```
 
-## Customer Auth (Optional)
+## Customer Order Access
 
-Customers are per-tenant and don't have passwords by default. For order tracking:
+Customers are per-tenant and do not have passwords by default.
 
-```
-POST /customers/auth
-Body: { email, orderId, viewToken }
-→ Verify order belongs to email and viewToken matches
-→ Issue short-lived customer JWT (1 hour)
-→ Allows viewing order history for that email
-```
+- Guest order tracking uses `GET /orders/track/:orderId?token={viewToken}` with the storefront tenant resolved from `x-tenant-id`.
+- `viewToken` is generated when the order is created, returned to the app once, and stored server-side only as a hash.
+- Authenticated customer/account order history uses the JWT-protected order endpoints and is scoped by tenant plus customer email/account rules.
 
 ## Role-Based Access Control (RBAC)
 
@@ -116,6 +117,7 @@ On password change: revoke all refresh tokens for the user.
 ## Security Headers
 
 All responses include:
+
 - `X-Content-Type-Options: nosniff`
 - `X-Frame-Options: DENY`
 - `Strict-Transport-Security` (in production)

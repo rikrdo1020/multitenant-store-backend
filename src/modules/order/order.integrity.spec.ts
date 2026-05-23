@@ -14,7 +14,7 @@ describe('OrderService order integrity', () => {
     count: vi.fn(),
     findById: vi.fn(),
     findByIdForCustomerEmail: vi.fn(),
-    findByOrderId: vi.fn(),
+    findByOrderIdAndViewTokenHash: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
     findCustomerById: vi.fn(),

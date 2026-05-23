@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { OrderStatus } from '@prisma/client';
 import { OrderRepository } from '../order/order.repository';
 import { OrderStockService } from '../order/order-stock.service';
+import { hashOrderViewToken } from '../order/order-view-token';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { CashProvider } from './providers/cash.provider';
 import { YappyProvider } from './providers/yappy.provider';
@@ -53,7 +54,11 @@ export class PaymentService {
     dto: CreatePaymentDto,
     tenantId: string,
   ) {
-    const order = await this.orders.findByOrderId(dto.orderId, tenantId);
+    const order = await this.orders.findByOrderIdAndViewTokenHash(
+      dto.orderId,
+      tenantId,
+      hashOrderViewToken(dto.viewToken),
+    );
 
     if (!order) throw new BadRequestException('Order not found');
 

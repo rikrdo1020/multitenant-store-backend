@@ -400,7 +400,7 @@ Same shape as categories.
 
 ### POST `/orders`
 
-**Headers:** `Authorization: Bearer {token}`, `x-tenant-id: {tenantSlug}`
+**Headers:** `x-tenant-id: {tenantSlug}`
 
 **Request:**
 ```json
@@ -441,29 +441,48 @@ Same shape as categories.
 {
   "success": true,
   "data": {
-    "order": {
-      "documentId": "ord_001",
-      "orderId": "ORD-2026-0001",
-      "orderStatus": "pending",
-      "items": [ /* same as request */ ],
-      "customerData": { /* same as request */ },
-      "shippingMethod": { /* full shipping method object */ },
-      "shippingAddress": { /* same as request */ },
-      "total": 104.99,
-      "createdAt": "2026-05-13T20:00:00Z"
-    },
-    "clientSecret": "pi_3N..._secret_..."
+    "documentId": "ord_001",
+    "orderId": "ORD-2026-0001",
+    "viewToken": "public-view-token-returned-once",
+    "orderStatus": "pending",
+    "items": [ /* trusted backend item snapshots */ ],
+    "customerData": { /* customer snapshot */ },
+    "shippingData": { /* trusted shipping snapshot */ },
+    "total": 104.99,
+    "createdAt": "2026-05-13T20:00:00Z"
   }
 }
 ```
 
-> `clientSecret` is only present when tenant provider is `stripe`. For `yappy`, the backend should return `transactionId`, `token`, and `paymentUrl` instead.
+`viewToken` is returned only when the order is created. The backend stores only a hash of this token.
+
+### GET `/orders/track/:orderId?token={viewToken}`
+
+**Headers:** `x-tenant-id: {tenantSlug}`
+
+**Response (200):** Public order object. `viewTokenHash` is never returned.
+
+### POST `/payments/yappy/create`
+
+**Headers:** `x-tenant-id: {tenantSlug}`
+
+**Request:**
+```json
+{
+  "orderId": "ORD-2026-0001",
+  "viewToken": "public-view-token-returned-once",
+  "amount": 104.99,
+  "aliasYappy": "67891234"
+}
+```
+
+**Response (200):** Yappy payment payload. The backend uses the persisted order total and validates `orderId + viewToken + tenant`.
 
 ### GET `/orders/:orderId`
 
-**Headers:** `Authorization: Bearer {token}` (or public with `?email=&token=` for guests)
+**Headers:** `x-tenant-id: {tenantSlug}`
 
-**Response (200):** Order object (same shape as inside create response).
+**Response (200):** Authenticated customer/admin order object.
 
 ### PATCH `/orders/:orderId/status`
 

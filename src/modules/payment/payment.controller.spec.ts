@@ -12,14 +12,24 @@ describe('PaymentController', () => {
     await expect(
       controller.create(
         'yappy',
-        { orderId: 'ORD-001', amount: 75, aliasYappy: '6789-1234' },
+        {
+          orderId: 'ORD-001',
+          amount: 75,
+          viewToken: 'view-token',
+          aliasYappy: '6789-1234',
+        },
         { id: 'tenant-1' } as any,
       ),
     ).resolves.toBe(result);
 
     expect(service.createPaymentForOrder).toHaveBeenCalledWith(
       'yappy',
-      { orderId: 'ORD-001', amount: 75, aliasYappy: '6789-1234' },
+      {
+        orderId: 'ORD-001',
+        amount: 75,
+        viewToken: 'view-token',
+        aliasYappy: '6789-1234',
+      },
       'tenant-1',
     );
   });

@@ -49,9 +49,13 @@ export class OrderRepository {
     });
   }
 
-  findByOrderId(orderId: string, tenantId: string) {
+  findByOrderIdAndViewTokenHash(
+    orderId: string,
+    tenantId: string,
+    viewTokenHash: string,
+  ) {
     return this.prisma.order.findFirst({
-      where: { orderId, tenantId },
+      where: { orderId, tenantId, viewTokenHash },
       include: ORDER_INCLUDE,
     });
   }

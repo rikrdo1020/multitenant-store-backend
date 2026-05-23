@@ -1,4 +1,5 @@
 import { ForbiddenException } from '@nestjs/common';
+import { createHash } from 'crypto';
 import {
   OrderStatus,
   ProductStatus,
@@ -18,7 +19,7 @@ describe('OrderService customer visibility', () => {
     count: vi.fn(),
     findById: vi.fn(),
     findByIdForCustomerEmail: vi.fn(),
-    findByOrderId: vi.fn(),
+    findByOrderIdAndViewTokenHash: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
     findCustomerById: vi.fn(),
@@ -165,7 +166,7 @@ describe('OrderService customer visibility', () => {
       }),
     );
 
-    await service.create('tenant-1', {
+    const result = (await service.create('tenant-1', {
       customerData: {
         name: 'Buyer',
         email: 'Buyer@Example.com',
@@ -180,7 +181,7 @@ describe('OrderService customer visibility', () => {
       shippingMethodId: 'ship-1',
       shippingCost: 3,
       paymentMethod: 'pending',
-    });
+    })) as Record<string, unknown>;
 
     expect(repo.upsertCustomerFromOrder).toHaveBeenCalledWith('tenant-1', {
       name: 'Buyer',
@@ -199,9 +200,66 @@ describe('OrderService customer visibility', () => {
           phone: '+50760000000',
         },
         customer: { connect: { id: 'customer-1' } },
+        viewTokenHash: expect.any(String),
       }),
       expect.any(Array),
     );
+    expect(result.viewToken).toEqual(expect.any(String));
+    expect(result.viewTokenHash).toBeUndefined();
+  });
+
+  it('GIVEN valid tracking token WHEN reading public order SHOULD hash token and return order without hash', async () => {
+    repo.findByOrderIdAndViewTokenHash.mockResolvedValue({
+      id: 'order-1',
+      orderId: 'ORD-1',
+      viewTokenHash: 'internal-hash',
+      orderStatus: OrderStatus.pending,
+      total: 10,
+      shippingCost: 0,
+      customerData: { email: 'buyer@example.com' },
+      shippingData: {},
+      items: [],
+      paymentMethod: 'pending',
+      tenantId: 'tenant-1',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const result = (await service.findByOrderIdForTracking(
+      'ORD-1',
+      'tenant-1',
+      'public-token',
+    )) as Record<string, unknown>;
+
+    expect(repo.findByOrderIdAndViewTokenHash).toHaveBeenCalledWith(
+      'ORD-1',
+      'tenant-1',
+      hashToken('public-token'),
+    );
+    expect(result.orderId).toBe('ORD-1');
+    expect(result.viewTokenHash).toBeUndefined();
+  });
+
+  it('GIVEN missing tracking token WHEN reading public order SHOULD reject before querying', async () => {
+    await expect(
+      service.findByOrderIdForTracking('ORD-1', 'tenant-1', ''),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'ORDER_TRACKING_TOKEN_REQUIRED',
+      }),
+    });
+
+    expect(repo.findByOrderIdAndViewTokenHash).not.toHaveBeenCalled();
+  });
+
+  it('GIVEN invalid tracking token WHEN reading public order SHOULD hide the order', async () => {
+    repo.findByOrderIdAndViewTokenHash.mockResolvedValue(null);
+
+    await expect(
+      service.findByOrderIdForTracking('ORD-1', 'tenant-1', 'bad-token'),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'ORDER_NOT_FOUND' }),
+    });
   });
 
   it('GIVEN a non-member authenticated user WHEN updating status SHOULD reject the mutation', async () => {
@@ -214,3 +272,7 @@ describe('OrderService customer visibility', () => {
     expect(stock.transitionOrderStatusById).not.toHaveBeenCalled();
   });
 });
+
+function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}

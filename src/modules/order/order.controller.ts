@@ -31,6 +31,10 @@ class OrderFilterQuery {
   @IsOptional() @IsInt() @Min(1) @Type(() => Number) pageSize?: number;
 }
 
+class TrackOrderQuery {
+  @IsOptional() @IsString() token?: string;
+}
+
 @Controller('orders')
 export class OrderController {
   constructor(private readonly orderService: OrderService) {}
@@ -43,11 +47,19 @@ export class OrderController {
     return this.orderService.create(tenant.id, dto);
   }
 
-  // Storefront: track own order by public orderId.
+  // Storefront: track own order by public orderId + view token.
   @Public()
   @Get('track/:orderId')
-  track(@Param('orderId') orderId: string, @CurrentTenant() tenant: Tenant) {
-    return this.orderService.findByOrderId(orderId, tenant.id);
+  track(
+    @Param('orderId') orderId: string,
+    @CurrentTenant() tenant: Tenant,
+    @Query() query: TrackOrderQuery,
+  ) {
+    return this.orderService.findByOrderIdForTracking(
+      orderId,
+      tenant.id,
+      query.token,
+    );
   }
 
   // Storefront account + admin order list. Service applies tenant membership/customer-email scoping.
