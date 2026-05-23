@@ -5,6 +5,7 @@ import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { OrderStatus, UserRole } from '@prisma/client';
 import { serialize, serializeList } from '../../common/utils/serializer';
 import { nanoid } from 'nanoid';
+import { NotificationService } from '../notification/notification.service';
 
 export interface OrderListFilter {
   status?: OrderStatus;
@@ -24,7 +25,10 @@ export interface AuthenticatedOrderUser {
 
 @Injectable()
 export class OrderService {
-  constructor(private readonly repo: OrderRepository) {}
+  constructor(
+    private readonly repo: OrderRepository,
+    private readonly notifications: NotificationService,
+  ) {}
 
   async findAll(tenantId: string, filter: OrderListFilter = {}) {
     const page = filter.page ?? 1;
@@ -116,6 +120,13 @@ export class OrderService {
       customer: { connect: { id: customer.id } },
     });
 
+    void this.notifyTenantMembers(tenantId, {
+      title: 'Nueva orden recibida',
+      body: `Orden ${orderId} de ${customerData.name}`,
+      type: 'order_created',
+      metadata: { orderId: order.id, orderRef: orderId },
+    });
+
     return serialize(order);
   }
 
@@ -143,6 +154,15 @@ export class OrderService {
       ...(dto.dispatched !== undefined && { dispatched: dto.dispatched }),
     });
 
+    if (dto.orderStatus) {
+      void this.notifyTenantMembers(tenantId, {
+        title: 'Estado de orden actualizado',
+        body: `Orden ${updated.orderId} cambió a ${dto.orderStatus}`,
+        type: 'order_status_changed',
+        metadata: { orderId: updated.id, orderRef: updated.orderId, status: dto.orderStatus },
+      });
+    }
+
     return serialize(updated);
   }
 
@@ -152,6 +172,18 @@ export class OrderService {
 
     const membership = await this.repo.hasTenantMembership(user.sub, tenantId);
     return !!membership;
+  }
+
+  private async notifyTenantMembers(
+    tenantId: string,
+    payload: { title: string; body: string; type: 'order_created' | 'order_status_changed'; metadata?: Record<string, unknown> },
+  ): Promise<void> {
+    const userIds = await this.repo.findTenantMemberUserIds(tenantId);
+    await Promise.all(
+      userIds.map((userId) =>
+        this.notifications.send({ userId, ...payload }).catch(() => undefined),
+      ),
+    );
   }
 
   private normalizeEmail(email: string): string {

@@ -15,9 +15,11 @@ describe('OrderService customer visibility', () => {
     findCustomerById: vi.fn(),
     upsertCustomerFromOrder: vi.fn(),
     hasTenantMembership: vi.fn(),
+    findTenantMemberUserIds: vi.fn().mockResolvedValue([]),
   };
 
-  const service = new OrderService(repo as any);
+  const notifications = { send: vi.fn().mockResolvedValue(undefined) };
+  const service = new OrderService(repo as any, notifications as any);
 
   const adminUser = {
     sub: 'user-admin',

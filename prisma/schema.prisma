@@ -51,6 +51,17 @@ enum PaymentProvider {
   mercadopago
 }
 
+enum NotificationPlatform {
+  ios
+  android
+}
+
+enum NotificationType {
+  order_created
+  order_status_changed
+  team_invitation
+}
+
 // ---------------------------------------------------------------------------
 // Core models
 // ---------------------------------------------------------------------------
@@ -71,6 +82,8 @@ model User {
   passwordResetTokens PasswordResetToken[]
   sentMemberInvites   MemberInvitation[] @relation("MemberInvitationInviter")
   ownedTenants        Tenant[]             @relation("TenantOwner")
+  pushTokens          PushToken[]
+  notifications       Notification[]
 }
 
 model RefreshToken {
@@ -390,6 +403,37 @@ model Combo {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+model PushToken {
+  id        String               @id @default(cuid())
+  userId    String
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String
+  platform  NotificationPlatform
+  createdAt DateTime             @default(now())
+
+  @@unique([userId, token])
+  @@index([userId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String
+  type      NotificationType
+  read      Boolean          @default(false)
+  metadata  Json?
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+  @@index([userId, read])
 }
 
 // ---------------------------------------------------------------------------

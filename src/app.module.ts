@@ -28,6 +28,7 @@ import { UploadModule } from './modules/upload/upload.module';
 import { WebhookModule } from './modules/webhook/webhook.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { NotificationModule } from './modules/notification/notification.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
     WebhookModule,
     PaymentModule,
     AnalyticsModule,
+    NotificationModule,
   ],
 })
 export class AppModule implements NestModule {
