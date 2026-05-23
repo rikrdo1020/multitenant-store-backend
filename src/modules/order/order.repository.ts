@@ -97,6 +97,12 @@ export class OrderRepository {
     });
   }
 
+  findTenantMemberUserIds(tenantId: string): Promise<string[]> {
+    return this.prisma.tenantMember
+      .findMany({ where: { tenantId }, select: { userId: true } })
+      .then((members) => members.map((m) => m.userId));
+  }
+
   private buildWhere(filter: OrderFilter): Prisma.OrderWhereInput {
     const where: Prisma.OrderWhereInput = { tenantId: filter.tenantId };
     if (filter.status) where.orderStatus = filter.status;

@@ -39,7 +39,8 @@ describe('MemberService invitations', () => {
     sendMemberInvite: vi.fn(),
   };
 
-  const service = new MemberService(prisma as any, config as any, resend as any);
+  const notifications = { send: vi.fn().mockResolvedValue(undefined) };
+  const service = new MemberService(prisma as any, config as any, resend as any, notifications as any);
   const tenant = { id: 'tenant-1', name: 'Demo Store' };
 
   beforeEach(() => {
