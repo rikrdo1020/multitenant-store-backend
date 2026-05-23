@@ -1,0 +1,29 @@
+import {
+  OrderShippingLocationForCheckout,
+  OrderShippingMethodForCheckout,
+} from './order.types';
+
+export interface TrustedOrderItem {
+  productId: string;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  imageUrl?: string;
+  type?: string;
+  selectedOptions?: Record<string, string>;
+}
+
+export interface TrustedOrderPayload {
+  items: TrustedOrderItem[];
+  shippingData: Record<string, unknown>;
+  shippingCost: number;
+  shippingMethodId: string;
+  shippingLocationId?: string;
+  total: number;
+}
+
+export interface ResolvedShipping {
+  method: OrderShippingMethodForCheckout;
+  location?: OrderShippingLocationForCheckout;
+  cost: number;
+}

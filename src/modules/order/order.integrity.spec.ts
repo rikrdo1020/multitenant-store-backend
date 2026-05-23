@@ -2,7 +2,10 @@ import { BadRequestException } from '@nestjs/common';
 import { OrderStatus, ProductStatus, ShippingType } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { OrderItemIntegrityService } from './order-item-integrity.service';
 import { OrderIntegrityService } from './order-integrity.service';
+import { OrderPricingService } from './order-pricing.service';
+import { OrderShippingIntegrityService } from './order-shipping-integrity.service';
 import { OrderService } from './order.service';
 
 describe('OrderService order integrity', () => {
@@ -19,23 +22,39 @@ describe('OrderService order integrity', () => {
     hasTenantMembership: vi.fn(),
     findProductsByIds: vi.fn(),
     findActiveShippingMethodById: vi.fn(),
+    findActiveCombos: vi.fn(),
+  };
+  const stock = {
+    createOrderWithStockReservation: vi.fn(),
+    transitionOrderStatusById: vi.fn(),
   };
 
-  const integrity = new OrderIntegrityService(repo as any);
-  const service = new OrderService(repo as any, integrity);
+  const itemIntegrity = new OrderItemIntegrityService(repo as any);
+  const pricing = new OrderPricingService();
+  const shipping = new OrderShippingIntegrityService(repo as any);
+  const integrity = new OrderIntegrityService(
+    repo as any,
+    itemIntegrity,
+    pricing,
+    shipping,
+  );
+  const service = new OrderService(repo as any, integrity, stock as any);
 
   beforeEach(() => {
     vi.clearAllMocks();
     repo.upsertCustomerFromOrder.mockResolvedValue({ id: 'customer-1' });
     repo.findProductsByIds.mockResolvedValue([publishedProduct()]);
     repo.findActiveShippingMethodById.mockResolvedValue(activeShippingMethod());
-    repo.create.mockImplementation(async (data) => ({
-      id: 'order-1',
-      ...data,
-      orderStatus: OrderStatus.pending,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }));
+    repo.findActiveCombos.mockResolvedValue([]);
+    stock.createOrderWithStockReservation.mockImplementation(
+      async (_tenantId, data) => ({
+        id: 'order-1',
+        ...data,
+        orderStatus: OrderStatus.pending,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+    );
   });
 
   it('GIVEN manipulated item and shipping prices WHEN creating an order SHOULD recalculate totals from backend data', async () => {
@@ -54,7 +73,8 @@ describe('OrderService order integrity', () => {
       'ship-1',
       'tenant-1',
     );
-    expect(repo.create).toHaveBeenCalledWith(
+    expect(stock.createOrderWithStockReservation).toHaveBeenCalledWith(
+      'tenant-1',
       expect.objectContaining({
         total: 207.48,
         shippingCost: 7.5,
@@ -68,6 +88,7 @@ describe('OrderService order integrity', () => {
           }),
         ],
       }),
+      expect.any(Array),
     );
   });
 
@@ -80,7 +101,7 @@ describe('OrderService order integrity', () => {
       response: expect.objectContaining({ code: 'ORDER_PRODUCT_NOT_FOUND' }),
     });
 
-    expect(repo.create).not.toHaveBeenCalled();
+    expect(stock.createOrderWithStockReservation).not.toHaveBeenCalled();
   });
 
   it('GIVEN an unpublished product WHEN creating an order SHOULD reject the order', async () => {
@@ -94,7 +115,7 @@ describe('OrderService order integrity', () => {
       response: expect.objectContaining({ code: 'ORDER_PRODUCT_UNAVAILABLE' }),
     });
 
-    expect(repo.create).not.toHaveBeenCalled();
+    expect(stock.createOrderWithStockReservation).not.toHaveBeenCalled();
   });
 
   it('GIVEN requested quantity exceeds stock WHEN creating an order SHOULD reject the order', async () => {
@@ -118,7 +139,7 @@ describe('OrderService order integrity', () => {
       response: expect.objectContaining({ code: 'ORDER_INSUFFICIENT_STOCK' }),
     });
 
-    expect(repo.create).not.toHaveBeenCalled();
+    expect(stock.createOrderWithStockReservation).not.toHaveBeenCalled();
   });
 
   it('GIVEN the same product appears in multiple cart lines WHEN aggregate quantity exceeds stock SHOULD reject the order', async () => {
@@ -150,7 +171,7 @@ describe('OrderService order integrity', () => {
       response: expect.objectContaining({ code: 'ORDER_INSUFFICIENT_STOCK' }),
     });
 
-    expect(repo.create).not.toHaveBeenCalled();
+    expect(stock.createOrderWithStockReservation).not.toHaveBeenCalled();
   });
 
   it('GIVEN an inactive shipping method WHEN creating an order SHOULD reject the order', async () => {
@@ -164,7 +185,7 @@ describe('OrderService order integrity', () => {
       }),
     });
 
-    expect(repo.create).not.toHaveBeenCalled();
+    expect(stock.createOrderWithStockReservation).not.toHaveBeenCalled();
   });
 
   it('GIVEN an invalid shipping location WHEN creating an order SHOULD reject the order', async () => {
@@ -179,7 +200,7 @@ describe('OrderService order integrity', () => {
       }),
     });
 
-    expect(repo.create).not.toHaveBeenCalled();
+    expect(stock.createOrderWithStockReservation).not.toHaveBeenCalled();
   });
 
   it('GIVEN selected options WHEN creating an order SHOULD preserve them in the trusted item snapshot', async () => {
@@ -198,7 +219,8 @@ describe('OrderService order integrity', () => {
       }),
     );
 
-    expect(repo.create).toHaveBeenCalledWith(
+    expect(stock.createOrderWithStockReservation).toHaveBeenCalledWith(
+      'tenant-1',
       expect.objectContaining({
         items: [
           expect.objectContaining({
@@ -206,6 +228,37 @@ describe('OrderService order integrity', () => {
           }),
         ],
       }),
+      expect.any(Array),
+    );
+  });
+
+  it('GIVEN an active combo WHEN creating an order SHOULD apply combo-aware pricing server-side', async () => {
+    repo.findActiveCombos.mockResolvedValue([
+      {
+        id: 'combo-1',
+        price: 150,
+        isActive: true,
+        rules: [{ productType: 'audio', quantity: 2 }],
+      },
+    ]);
+
+    await service.create(
+      'tenant-1',
+      createOrderDto({
+        items: [
+          { productId: 'prod-1', name: 'Fake Name', quantity: 2, unitPrice: 1 },
+        ],
+        shippingCost: 0,
+      }),
+    );
+
+    expect(stock.createOrderWithStockReservation).toHaveBeenCalledWith(
+      'tenant-1',
+      expect.objectContaining({
+        total: 157.5,
+        shippingCost: 7.5,
+      }),
+      expect.any(Array),
     );
   });
 
@@ -214,7 +267,7 @@ describe('OrderService order integrity', () => {
       service.create('tenant-1', createOrderDto({ items: [] })),
     ).rejects.toBeInstanceOf(BadRequestException);
 
-    expect(repo.create).not.toHaveBeenCalled();
+    expect(stock.createOrderWithStockReservation).not.toHaveBeenCalled();
   });
 });
 

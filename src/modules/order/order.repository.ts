@@ -1,58 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { Order, Prisma } from '@prisma/client';
 import {
-  Order,
-  OrderStatus,
-  Prisma,
-  ProductStatus,
-  ShippingType,
-} from '@prisma/client';
-import { Decimal } from '@prisma/client/runtime/library';
-
-export interface OrderFilter {
-  tenantId: string;
-  status?: OrderStatus;
-  customerId?: string;
-  customerEmail?: string;
-  search?: string;
-}
-
-export interface OrderCustomerSnapshot {
-  name: string;
-  email: string;
-  phone: string;
-  notes?: string;
-  address?: string;
-  city?: string;
-}
-
-export interface OrderProductForCheckout {
-  id: string;
-  name: string;
-  price: Decimal;
-  discountPrice: Decimal | null;
-  stock: number;
-  productStatus: ProductStatus;
-  type: string | null;
-  images: string[];
-}
-
-export interface OrderShippingLocationForCheckout {
-  id: string;
-  key: string;
-  label: string;
-  extraPrice: Decimal | null;
-}
-
-export interface OrderShippingMethodForCheckout {
-  id: string;
-  name: string;
-  type: ShippingType;
-  basePrice: Decimal | null;
-  requiresDetails: boolean;
-  disclaimer: string | null;
-  logistics: OrderShippingLocationForCheckout[];
-}
+  OrderComboForPricing,
+  OrderCustomerSnapshot,
+  OrderFilter,
+  OrderProductForCheckout,
+  OrderShippingMethodForCheckout,
+} from './order.types';
 
 const ORDER_INCLUDE = {
   customer: { select: { id: true, name: true, email: true, phone: true } },
@@ -153,6 +108,18 @@ export class OrderRepository {
             extraPrice: true,
           },
         },
+      },
+    });
+  }
+
+  findActiveCombos(tenantId: string): Promise<OrderComboForPricing[]> {
+    return this.prisma.combo.findMany({
+      where: { tenantId, isActive: true },
+      select: {
+        id: true,
+        price: true,
+        isActive: true,
+        rules: true,
       },
     });
   }

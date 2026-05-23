@@ -21,7 +21,7 @@ import { CurrentUser } from '../../common/decorators/user.decorator';
 import { OrderStatus, UserRole, Tenant } from '@prisma/client';
 import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
 import { Type } from 'class-transformer';
-import type { AuthenticatedOrderUser } from './order.service';
+import type { AuthenticatedOrderUser } from './order.types';
 
 class OrderFilterQuery {
   @IsOptional() @IsEnum(OrderStatus) status?: OrderStatus;
@@ -35,7 +35,7 @@ class OrderFilterQuery {
 export class OrderController {
   constructor(private readonly orderService: OrderService) {}
 
-  // Storefront — customers create orders without auth
+  // Storefront: customers create orders without auth.
   @Public()
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -43,7 +43,7 @@ export class OrderController {
     return this.orderService.create(tenant.id, dto);
   }
 
-  // Storefront — track own order by public orderId
+  // Storefront: track own order by public orderId.
   @Public()
   @Get('track/:orderId')
   track(@Param('orderId') orderId: string, @CurrentTenant() tenant: Tenant) {

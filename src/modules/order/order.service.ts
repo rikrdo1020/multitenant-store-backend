@@ -6,32 +6,19 @@ import {
 import { OrderRepository } from './order.repository';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
-import { OrderStatus, UserRole } from '@prisma/client';
+import { UserRole } from '@prisma/client';
 import { serialize, serializeList } from '../../common/utils/serializer';
 import { nanoid } from 'nanoid';
 import { OrderIntegrityService } from './order-integrity.service';
-
-export interface OrderListFilter {
-  status?: OrderStatus;
-  customerId?: string;
-  customerEmail?: string;
-  search?: string;
-  page?: number;
-  pageSize?: number;
-}
-
-export interface AuthenticatedOrderUser {
-  sub: string;
-  email: string;
-  role: UserRole;
-  tenantId?: string;
-}
+import { OrderStockService } from './order-stock.service';
+import { AuthenticatedOrderUser, OrderListFilter } from './order.types';
 
 @Injectable()
 export class OrderService {
   constructor(
     private readonly repo: OrderRepository,
     private readonly integrity: OrderIntegrityService,
+    private readonly stock: OrderStockService,
   ) {}
 
   async findAll(tenantId: string, filter: OrderListFilter = {}) {
@@ -136,19 +123,23 @@ export class OrderService {
       });
     }
 
-    const order = await this.repo.create({
-      orderId,
-      total: trustedOrder.total,
-      shippingCost: trustedOrder.shippingCost,
-      customerData: customerData as any,
-      shippingData: trustedOrder.shippingData as any,
-      items: trustedOrder.items as any,
-      paymentMethod: dto.paymentMethod,
-      shippingMethodId: trustedOrder.shippingMethodId,
-      shippingLocationId: trustedOrder.shippingLocationId,
-      tenant: { connect: { id: tenantId } },
-      customer: { connect: { id: customer.id } },
-    });
+    const order = await this.stock.createOrderWithStockReservation(
+      tenantId,
+      {
+        orderId,
+        total: trustedOrder.total,
+        shippingCost: trustedOrder.shippingCost,
+        customerData: customerData as any,
+        shippingData: trustedOrder.shippingData as any,
+        items: trustedOrder.items as any,
+        paymentMethod: dto.paymentMethod,
+        shippingMethodId: trustedOrder.shippingMethodId,
+        shippingLocationId: trustedOrder.shippingLocationId,
+        tenant: { connect: { id: tenantId } },
+        customer: { connect: { id: customer.id } },
+      },
+      trustedOrder.items,
+    );
 
     return serialize(order);
   }
@@ -171,9 +162,7 @@ export class OrderService {
   }
 
   async updateStatus(id: string, tenantId: string, dto: UpdateOrderStatusDto) {
-    await this.findById(id, tenantId);
-
-    const updated = await this.repo.update(id, {
+    const updated = await this.stock.transitionOrderStatusById(id, tenantId, {
       ...(dto.orderStatus && { orderStatus: dto.orderStatus }),
       ...(dto.transactionId !== undefined && {
         transactionId: dto.transactionId,

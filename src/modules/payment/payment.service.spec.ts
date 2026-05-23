@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { OrderStatus } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IPaymentProvider } from './interfaces/payment-provider.interface';
 import { CashProvider } from './providers/cash.provider';
@@ -16,11 +17,23 @@ describe('PaymentService', () => {
   let service: PaymentService;
   let yappyProvider: YappyProvider;
   let cashProvider: CashProvider;
+  let orders: ReturnType<typeof makeOrderRepository>;
+  let stock: ReturnType<typeof makeOrderStockService>;
+  let config: ReturnType<typeof makeConfigService>;
 
   beforeEach(() => {
     yappyProvider = makeProvider('yappy') as unknown as YappyProvider;
     cashProvider = makeProvider('cash') as unknown as CashProvider;
-    service = new PaymentService(yappyProvider, cashProvider);
+    orders = makeOrderRepository();
+    stock = makeOrderStockService();
+    config = makeConfigService();
+    service = new PaymentService(
+      yappyProvider,
+      cashProvider,
+      orders as any,
+      config as any,
+      stock as any,
+    );
   });
 
   describe('getProvider', () => {
@@ -34,7 +47,9 @@ describe('PaymentService', () => {
 
     it('throws for unknown provider', () => {
       expect(() => service.getProvider('stripe')).toThrow(BadRequestException);
-      expect(() => service.getProvider('stripe')).toThrow('"stripe" is not supported');
+      expect(() => service.getProvider('stripe')).toThrow(
+        '"stripe" is not supported',
+      );
     });
   });
 
@@ -53,8 +68,104 @@ describe('PaymentService', () => {
 
     it('throws for unsupported provider', async () => {
       await expect(
-        service.createPayment('paypal', { orderId: 'x', amount: 1, tenantId: 't' }),
+        service.createPayment('paypal', {
+          orderId: 'x',
+          amount: 1,
+          tenantId: 't',
+        }),
       ).rejects.toThrow('not supported');
     });
   });
+
+  describe('createPaymentForOrder', () => {
+    it('throws when order does not exist for tenant', async () => {
+      orders.findByOrderId.mockResolvedValue(null);
+
+      await expect(
+        service.createPaymentForOrder(
+          'yappy',
+          { orderId: 'MISSING', amount: 50 },
+          'tenant-1',
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('uses persisted order total instead of client amount', async () => {
+      await service.createPaymentForOrder(
+        'yappy',
+        { orderId: 'ORD-001', amount: 1 },
+        'tenant-1',
+      );
+
+      expect(yappyProvider.createPayment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderId: 'ORD-001',
+          amount: 75,
+          tenantId: 'tenant-1',
+        }),
+      );
+      expect(stock.transitionOrderStatusByOrderId).not.toHaveBeenCalled();
+    });
+
+    it('marks cash order paid through stock lifecycle service', async () => {
+      await service.createPaymentForOrder(
+        'cash',
+        { orderId: 'ORD-001', amount: 75 },
+        'tenant-1',
+      );
+
+      expect(stock.transitionOrderStatusByOrderId).toHaveBeenCalledWith(
+        'ORD-001',
+        'tenant-1',
+        {
+          orderStatus: OrderStatus.paid,
+        },
+      );
+    });
+
+    it('marks Yappy mock order paid through stock lifecycle service', async () => {
+      config.get.mockReturnValue('true');
+      (yappyProvider.createPayment as any).mockResolvedValue({
+        transactionId: 'MOCK-TXN-1',
+      });
+
+      await service.createPaymentForOrder(
+        'yappy',
+        { orderId: 'ORD-001', amount: 75 },
+        'tenant-1',
+      );
+
+      expect(stock.transitionOrderStatusByOrderId).toHaveBeenCalledWith(
+        'ORD-001',
+        'tenant-1',
+        {
+          orderStatus: OrderStatus.paid,
+          transactionId: 'MOCK-TXN-1',
+        },
+      );
+    });
+  });
 });
+
+function makeOrderRepository() {
+  return {
+    findByOrderId: vi.fn().mockResolvedValue({
+      id: 'id-1',
+      orderId: 'ORD-001',
+      total: '75.00',
+      tenantId: 'tenant-1',
+    }),
+  };
+}
+
+function makeConfigService() {
+  return { get: vi.fn().mockReturnValue('false') };
+}
+
+function makeOrderStockService() {
+  return {
+    transitionOrderStatusByOrderId: vi
+      .fn()
+      .mockResolvedValue({ id: 'order-1' }),
+  };
+}

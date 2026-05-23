@@ -6,7 +6,10 @@ import {
   UserRole,
 } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { OrderItemIntegrityService } from './order-item-integrity.service';
 import { OrderIntegrityService } from './order-integrity.service';
+import { OrderPricingService } from './order-pricing.service';
+import { OrderShippingIntegrityService } from './order-shipping-integrity.service';
 import { OrderService } from './order.service';
 
 describe('OrderService customer visibility', () => {
@@ -23,10 +26,23 @@ describe('OrderService customer visibility', () => {
     hasTenantMembership: vi.fn(),
     findProductsByIds: vi.fn(),
     findActiveShippingMethodById: vi.fn(),
+    findActiveCombos: vi.fn(),
+  };
+  const stock = {
+    createOrderWithStockReservation: vi.fn(),
+    transitionOrderStatusById: vi.fn(),
   };
 
-  const integrity = new OrderIntegrityService(repo as any);
-  const service = new OrderService(repo as any, integrity);
+  const itemIntegrity = new OrderItemIntegrityService(repo as any);
+  const pricing = new OrderPricingService();
+  const shipping = new OrderShippingIntegrityService(repo as any);
+  const integrity = new OrderIntegrityService(
+    repo as any,
+    itemIntegrity,
+    pricing,
+    shipping,
+  );
+  const service = new OrderService(repo as any, integrity, stock as any);
 
   const adminUser = {
     sub: 'user-admin',
@@ -46,6 +62,7 @@ describe('OrderService customer visibility', () => {
     repo.findMany.mockResolvedValue([]);
     repo.count.mockResolvedValue(0);
     repo.hasTenantMembership.mockResolvedValue(null);
+    repo.findActiveCombos.mockResolvedValue([]);
     repo.findProductsByIds.mockResolvedValue([
       {
         id: 'prod-1',
@@ -138,13 +155,15 @@ describe('OrderService customer visibility', () => {
 
   it('GIVEN checkout customer data WHEN creating an order SHOULD upsert and connect the tenant customer', async () => {
     repo.upsertCustomerFromOrder.mockResolvedValue({ id: 'customer-1' });
-    repo.create.mockImplementation(async (data) => ({
-      id: 'order-1',
-      ...data,
-      orderStatus: OrderStatus.pending,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }));
+    stock.createOrderWithStockReservation.mockImplementation(
+      async (_tenantId, data) => ({
+        id: 'order-1',
+        ...data,
+        orderStatus: OrderStatus.pending,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+    );
 
     await service.create('tenant-1', {
       customerData: {
@@ -170,7 +189,8 @@ describe('OrderService customer visibility', () => {
       address: 'Street 1',
       city: 'Panama',
     });
-    expect(repo.create).toHaveBeenCalledWith(
+    expect(stock.createOrderWithStockReservation).toHaveBeenCalledWith(
+      'tenant-1',
       expect.objectContaining({
         total: 13,
         customerData: {
@@ -180,6 +200,7 @@ describe('OrderService customer visibility', () => {
         },
         customer: { connect: { id: 'customer-1' } },
       }),
+      expect.any(Array),
     );
   });
 
@@ -190,6 +211,6 @@ describe('OrderService customer visibility', () => {
       }),
     ).rejects.toBeInstanceOf(ForbiddenException);
 
-    expect(repo.update).not.toHaveBeenCalled();
+    expect(stock.transitionOrderStatusById).not.toHaveBeenCalled();
   });
 });
