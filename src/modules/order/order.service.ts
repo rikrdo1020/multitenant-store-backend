@@ -1,10 +1,15 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { OrderRepository } from './order.repository';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { OrderStatus, UserRole } from '@prisma/client';
 import { serialize, serializeList } from '../../common/utils/serializer';
 import { nanoid } from 'nanoid';
+import { OrderIntegrityService } from './order-integrity.service';
 
 export interface OrderListFilter {
   status?: OrderStatus;
@@ -24,7 +29,10 @@ export interface AuthenticatedOrderUser {
 
 @Injectable()
 export class OrderService {
-  constructor(private readonly repo: OrderRepository) {}
+  constructor(
+    private readonly repo: OrderRepository,
+    private readonly integrity: OrderIntegrityService,
+  ) {}
 
   async findAll(tenantId: string, filter: OrderListFilter = {}) {
     const page = filter.page ?? 1;
@@ -46,7 +54,11 @@ export class OrderService {
     return serializeList(items, { page, pageSize, total });
   }
 
-  async findAllForUser(tenantId: string, user: AuthenticatedOrderUser, filter: OrderListFilter = {}) {
+  async findAllForUser(
+    tenantId: string,
+    user: AuthenticatedOrderUser,
+    filter: OrderListFilter = {},
+  ) {
     const canManageOrders = await this.canManageOrders(tenantId, user);
     if (canManageOrders) {
       return this.findAll(tenantId, filter);
@@ -61,24 +73,44 @@ export class OrderService {
 
   async findById(id: string, tenantId: string) {
     const order = await this.repo.findById(id, tenantId);
-    if (!order) throw new NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
+    if (!order)
+      throw new NotFoundException({
+        code: 'ORDER_NOT_FOUND',
+        message: 'Order not found',
+      });
     return serialize(order);
   }
 
-  async findByIdForUser(id: string, tenantId: string, user: AuthenticatedOrderUser) {
+  async findByIdForUser(
+    id: string,
+    tenantId: string,
+    user: AuthenticatedOrderUser,
+  ) {
     const canManageOrders = await this.canManageOrders(tenantId, user);
     if (canManageOrders) {
       return this.findById(id, tenantId);
     }
 
-    const order = await this.repo.findByIdForCustomerEmail(id, tenantId, this.normalizeEmail(user.email));
-    if (!order) throw new NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
+    const order = await this.repo.findByIdForCustomerEmail(
+      id,
+      tenantId,
+      this.normalizeEmail(user.email),
+    );
+    if (!order)
+      throw new NotFoundException({
+        code: 'ORDER_NOT_FOUND',
+        message: 'Order not found',
+      });
     return serialize(order);
   }
 
   async findByOrderId(orderId: string, tenantId: string) {
     const order = await this.repo.findByOrderId(orderId, tenantId);
-    if (!order) throw new NotFoundException({ code: 'ORDER_NOT_FOUND', message: 'Order not found' });
+    if (!order)
+      throw new NotFoundException({
+        code: 'ORDER_NOT_FOUND',
+        message: 'Order not found',
+      });
     return serialize(order);
   }
 
@@ -88,6 +120,7 @@ export class OrderService {
       ...dto.customerData,
       email: this.normalizeEmail(dto.customerData.email),
     };
+    const trustedOrder = await this.integrity.prepareOrder(tenantId, dto);
     const shippingAddress = this.extractShippingAddress(dto.shippingData);
     const customer = dto.customerId
       ? await this.repo.findCustomerById(dto.customerId, tenantId)
@@ -97,21 +130,22 @@ export class OrderService {
         });
 
     if (!customer) {
-      throw new NotFoundException({ code: 'CUSTOMER_NOT_FOUND', message: 'Customer not found' });
+      throw new NotFoundException({
+        code: 'CUSTOMER_NOT_FOUND',
+        message: 'Customer not found',
+      });
     }
-
-    const total = dto.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0) + dto.shippingCost;
 
     const order = await this.repo.create({
       orderId,
-      total,
-      shippingCost: dto.shippingCost,
+      total: trustedOrder.total,
+      shippingCost: trustedOrder.shippingCost,
       customerData: customerData as any,
-      shippingData: dto.shippingData as any,
-      items: dto.items as any,
+      shippingData: trustedOrder.shippingData as any,
+      items: trustedOrder.items as any,
       paymentMethod: dto.paymentMethod,
-      shippingMethodId: dto.shippingMethodId,
-      shippingLocationId: dto.shippingLocationId,
+      shippingMethodId: trustedOrder.shippingMethodId,
+      shippingLocationId: trustedOrder.shippingLocationId,
       tenant: { connect: { id: tenantId } },
       customer: { connect: { id: customer.id } },
     });
@@ -127,7 +161,10 @@ export class OrderService {
   ) {
     const canManageOrders = await this.canManageOrders(tenantId, user);
     if (!canManageOrders) {
-      throw new ForbiddenException({ code: 'FORBIDDEN', message: 'User cannot manage orders for this tenant' });
+      throw new ForbiddenException({
+        code: 'FORBIDDEN',
+        message: 'User cannot manage orders for this tenant',
+      });
     }
 
     return this.updateStatus(id, tenantId, dto);
@@ -138,15 +175,22 @@ export class OrderService {
 
     const updated = await this.repo.update(id, {
       ...(dto.orderStatus && { orderStatus: dto.orderStatus }),
-      ...(dto.transactionId !== undefined && { transactionId: dto.transactionId }),
-      ...(dto.confirmationNumber !== undefined && { confirmationNumber: dto.confirmationNumber }),
+      ...(dto.transactionId !== undefined && {
+        transactionId: dto.transactionId,
+      }),
+      ...(dto.confirmationNumber !== undefined && {
+        confirmationNumber: dto.confirmationNumber,
+      }),
       ...(dto.dispatched !== undefined && { dispatched: dto.dispatched }),
     });
 
     return serialize(updated);
   }
 
-  private async canManageOrders(tenantId: string, user: AuthenticatedOrderUser): Promise<boolean> {
+  private async canManageOrders(
+    tenantId: string,
+    user: AuthenticatedOrderUser,
+  ): Promise<boolean> {
     if (user.role === UserRole.superadmin) return true;
     if (![UserRole.admin, UserRole.manager].includes(user.role)) return false;
 

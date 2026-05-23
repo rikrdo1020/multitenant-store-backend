@@ -1,6 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { Order, OrderStatus, Prisma } from '@prisma/client';
+import {
+  Order,
+  OrderStatus,
+  Prisma,
+  ProductStatus,
+  ShippingType,
+} from '@prisma/client';
+import { Decimal } from '@prisma/client/runtime/library';
 
 export interface OrderFilter {
   tenantId: string;
@@ -17,6 +24,34 @@ export interface OrderCustomerSnapshot {
   notes?: string;
   address?: string;
   city?: string;
+}
+
+export interface OrderProductForCheckout {
+  id: string;
+  name: string;
+  price: Decimal;
+  discountPrice: Decimal | null;
+  stock: number;
+  productStatus: ProductStatus;
+  type: string | null;
+  images: string[];
+}
+
+export interface OrderShippingLocationForCheckout {
+  id: string;
+  key: string;
+  label: string;
+  extraPrice: Decimal | null;
+}
+
+export interface OrderShippingMethodForCheckout {
+  id: string;
+  name: string;
+  type: ShippingType;
+  basePrice: Decimal | null;
+  requiresDetails: boolean;
+  disclaimer: string | null;
+  logistics: OrderShippingLocationForCheckout[];
 }
 
 const ORDER_INCLUDE = {
@@ -42,10 +77,17 @@ export class OrderRepository {
   }
 
   findById(id: string, tenantId: string) {
-    return this.prisma.order.findFirst({ where: { id, tenantId }, include: ORDER_INCLUDE });
+    return this.prisma.order.findFirst({
+      where: { id, tenantId },
+      include: ORDER_INCLUDE,
+    });
   }
 
-  findByIdForCustomerEmail(id: string, tenantId: string, customerEmail: string) {
+  findByIdForCustomerEmail(
+    id: string,
+    tenantId: string,
+    customerEmail: string,
+  ) {
     return this.prisma.order.findFirst({
       where: { ...this.buildWhere({ tenantId, customerEmail }), id },
       include: ORDER_INCLUDE,
@@ -53,7 +95,10 @@ export class OrderRepository {
   }
 
   findByOrderId(orderId: string, tenantId: string) {
-    return this.prisma.order.findFirst({ where: { orderId, tenantId }, include: ORDER_INCLUDE });
+    return this.prisma.order.findFirst({
+      where: { orderId, tenantId },
+      include: ORDER_INCLUDE,
+    });
   }
 
   create(data: Prisma.OrderCreateInput): Promise<Order> {
@@ -66,6 +111,50 @@ export class OrderRepository {
 
   findCustomerById(id: string, tenantId: string) {
     return this.prisma.customer.findFirst({ where: { id, tenantId } });
+  }
+
+  findProductsByIds(
+    ids: string[],
+    tenantId: string,
+  ): Promise<OrderProductForCheckout[]> {
+    return this.prisma.product.findMany({
+      where: { id: { in: ids }, tenantId },
+      select: {
+        id: true,
+        name: true,
+        price: true,
+        discountPrice: true,
+        stock: true,
+        productStatus: true,
+        type: true,
+        images: true,
+      },
+    });
+  }
+
+  findActiveShippingMethodById(
+    id: string,
+    tenantId: string,
+  ): Promise<OrderShippingMethodForCheckout | null> {
+    return this.prisma.shippingMethod.findFirst({
+      where: { id, tenantId, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        basePrice: true,
+        requiresDetails: true,
+        disclaimer: true,
+        logistics: {
+          select: {
+            id: true,
+            key: true,
+            label: true,
+            extraPrice: true,
+          },
+        },
+      },
+    });
   }
 
   upsertCustomerFromOrder(tenantId: string, customer: OrderCustomerSnapshot) {
@@ -106,7 +195,13 @@ export class OrderRepository {
     if (filter.customerEmail) {
       andFilters.push({
         OR: [
-          { customer: { is: { email: { equals: filter.customerEmail, mode: 'insensitive' } } } },
+          {
+            customer: {
+              is: {
+                email: { equals: filter.customerEmail, mode: 'insensitive' },
+              },
+            },
+          },
           { customerData: { path: ['email'], equals: filter.customerEmail } },
         ],
       });
@@ -116,7 +211,12 @@ export class OrderRepository {
       andFilters.push({
         OR: [
           { orderId: { contains: filter.search, mode: 'insensitive' } },
-          { confirmationNumber: { contains: filter.search, mode: 'insensitive' } },
+          {
+            confirmationNumber: {
+              contains: filter.search,
+              mode: 'insensitive',
+            },
+          },
         ],
       });
     }
