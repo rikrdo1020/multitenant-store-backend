@@ -11,6 +11,8 @@ const makeTenant = (overrides = {}) => ({
   logo: null,
   primaryColor: '#000000',
   status: 'active',
+  plan: 'FREE',
+  planActivatedAt: null,
   ownerId: 'user_1',
   seoTitle: null,
   seoDescription: null,
@@ -41,6 +43,58 @@ describe('TenantService', () => {
   beforeEach(() => {
     repo = makeRepo();
     service = new TenantService(repo as unknown as TenantRepository);
+  });
+
+  describe('create', () => {
+    it('GIVEN valid input SHOULD create tenant with plan = FREE by default', async () => {
+      const created = makeTenant();
+      repo.findBySlug.mockResolvedValue(null);
+      repo.create.mockResolvedValue(created);
+
+      const result = await service.create({
+        slug: 'my-store',
+        name: 'My Store',
+        ownerId: 'user_1',
+      });
+
+      expect(result).toMatchObject({ plan: 'FREE', planActivatedAt: null });
+    });
+
+    it('GIVEN valid input SHOULD expose plan in serialized response', async () => {
+      const created = makeTenant({ plan: 'FREE' });
+      repo.findBySlug.mockResolvedValue(null);
+      repo.create.mockResolvedValue(created);
+
+      const result = await service.create({ slug: 'my-store', name: 'My Store', ownerId: 'user_1' });
+
+      expect(result).toHaveProperty('plan', 'FREE');
+      expect(result).not.toHaveProperty('id');
+    });
+
+    it('GIVEN duplicate slug SHOULD throw ConflictException', async () => {
+      repo.findBySlug.mockResolvedValue(makeTenant());
+
+      await expect(
+        service.create({ slug: 'my-store', name: 'My Store', ownerId: 'user_1' }),
+      ).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('findByIdOrFail', () => {
+    it('GIVEN existing tenant SHOULD return serialized tenant with plan field', async () => {
+      repo.findById.mockResolvedValue(makeTenant({ plan: 'FREE' }));
+
+      const result = await service.findByIdOrFail('tenant_1');
+
+      expect(result).toHaveProperty('plan', 'FREE');
+      expect(result).toHaveProperty('documentId', 'tenant_1');
+    });
+
+    it('GIVEN non-existent tenant SHOULD throw NotFoundException', async () => {
+      repo.findById.mockResolvedValue(null);
+
+      await expect(service.findByIdOrFail('bad_id')).rejects.toThrow(NotFoundException);
+    });
   });
 
   describe('checkSlug', () => {
