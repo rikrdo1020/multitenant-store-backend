@@ -4,13 +4,14 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { Request } from 'express';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { UserRole } from '@prisma/client';
+import { PlanType, UserRole } from '@prisma/client';
 
 export interface JwtPayload {
   sub: string;
   email: string;
   role: UserRole;
   tenantId?: string;
+  plan?: PlanType;
   type: 'access';
   iat?: number;
   exp?: number;

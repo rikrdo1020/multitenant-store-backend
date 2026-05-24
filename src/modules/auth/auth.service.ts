@@ -15,7 +15,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterInviteDto } from './dto/register-invite.dto';
 import * as bcrypt from 'bcryptjs';
-import { UserRole } from '@prisma/client';
+import { PlanType, UserRole } from '@prisma/client';
 import { JwtPayload } from './strategies/jwt.strategy';
 import * as crypto from 'crypto';
 
@@ -90,19 +90,20 @@ export class AuthService {
     const role = this.resolveEffectiveRole(user.role, user.tenants.map((t) => t.role));
     const primaryTenantId = user.tenants[0]?.tenantId;
 
-    const [accessToken, refreshToken, rawTenant] = await Promise.all([
-      this.signAccessToken(user.id, user.email, role, primaryTenantId),
+    const [refreshToken, rawTenant] = await Promise.all([
       this.signAndStoreRefreshToken(user.id),
       primaryTenantId
         ? this.prisma.tenant.findUnique({
             where: { id: primaryTenantId },
-            select: { id: true, slug: true, name: true, logo: true, description: true, primaryColor: true },
+            select: { id: true, slug: true, name: true, logo: true, description: true, primaryColor: true, plan: true },
           })
         : Promise.resolve(null),
     ]);
 
+    const accessToken = this.signAccessToken(user.id, user.email, role, primaryTenantId, rawTenant?.plan);
+
     const tenant = rawTenant
-      ? { documentId: rawTenant.id, slug: rawTenant.slug, name: rawTenant.name, logo: rawTenant.logo, description: rawTenant.description, primaryColor: rawTenant.primaryColor }
+      ? { documentId: rawTenant.id, slug: rawTenant.slug, name: rawTenant.name, logo: rawTenant.logo, description: rawTenant.description, primaryColor: rawTenant.primaryColor, plan: rawTenant.plan }
       : null;
 
     return {
@@ -381,12 +382,14 @@ export class AuthService {
     email: string,
     role: UserRole,
     tenantId?: string,
+    plan?: PlanType,
   ): string {
     const payload: Omit<JwtPayload, 'iat' | 'exp'> = {
       sub,
       email,
       role,
       tenantId,
+      plan,
       type: 'access',
     };
     return this.jwt.sign(payload, {

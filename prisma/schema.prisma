@@ -44,6 +44,11 @@ enum TenantStatus {
   inactive
 }
 
+enum PlanType {
+  FREE
+  PRO
+}
+
 enum PaymentProvider {
   stripe
   yappy
@@ -121,6 +126,8 @@ model Tenant {
   provider       PaymentProvider @default(stripe)
   providerConfig Json?
   customDomain   String?         @unique
+  plan           PlanType        @default(FREE)
+  planActivatedAt DateTime?
   ownerId        String
   owner          User            @relation("TenantOwner", fields: [ownerId], references: [id])
 
