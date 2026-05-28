@@ -18,6 +18,7 @@ import {
   hashOrderViewToken,
 } from './order-view-token';
 import { OrderEmailService } from './order-email.service';
+import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
 export class OrderService {
@@ -26,6 +27,7 @@ export class OrderService {
     private readonly integrity: OrderIntegrityService,
     private readonly stock: OrderStockService,
     private readonly emails: OrderEmailService,
+    private readonly notifications: NotificationService,
   ) {}
 
   async findAll(tenantId: string, filter: OrderListFilter = {}) {
@@ -165,6 +167,13 @@ export class OrderService {
       trustedOrder.items,
     );
 
+    void this.notifyTenantMembers(tenantId, {
+      title: 'Nueva orden recibida',
+      body: `Orden ${orderId} de ${customerData.name}`,
+      type: 'order_created',
+      metadata: { orderId: order.id, orderRef: orderId },
+    }).catch(() => undefined);
+
     await this.emails.sendOrderCreated(order);
     return this.serializeOrder(order, { viewToken });
   }
@@ -199,6 +208,15 @@ export class OrderService {
     });
 
     await this.emails.sendOrderStatusNotification(updated);
+    if (dto.orderStatus) {
+      void this.notifyTenantMembers(tenantId, {
+        title: 'Estado de orden actualizado',
+        body: `Orden ${updated.orderId} cambio a ${dto.orderStatus}`,
+        type: 'order_status_changed',
+        metadata: { orderId: updated.id, orderRef: updated.orderId, status: dto.orderStatus },
+      }).catch(() => undefined);
+    }
+
     return this.serializeOrder(updated);
   }
 
@@ -211,6 +229,18 @@ export class OrderService {
 
     const membership = await this.repo.hasTenantMembership(user.sub, tenantId);
     return !!membership;
+  }
+
+  private async notifyTenantMembers(
+    tenantId: string,
+    payload: { title: string; body: string; type: 'order_created' | 'order_status_changed'; metadata?: Record<string, unknown> },
+  ): Promise<void> {
+    const userIds = await this.repo.findTenantMemberUserIds(tenantId);
+    await Promise.all(
+      userIds.map((userId) =>
+        this.notifications.send({ userId, ...payload }).catch(() => undefined),
+      ),
+    );
   }
 
   private normalizeEmail(email: string): string {

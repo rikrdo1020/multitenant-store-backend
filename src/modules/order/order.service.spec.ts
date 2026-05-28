@@ -28,7 +28,9 @@ describe('OrderService customer visibility', () => {
     findProductsByIds: vi.fn(),
     findActiveShippingMethodById: vi.fn(),
     findActiveCombos: vi.fn(),
+    findTenantMemberUserIds: vi.fn().mockResolvedValue([]),
   };
+
   const stock = {
     createOrderWithStockReservation: vi.fn(),
     transitionOrderStatusById: vi.fn(),
@@ -37,6 +39,7 @@ describe('OrderService customer visibility', () => {
     sendOrderCreated: vi.fn(),
     sendOrderStatusNotification: vi.fn(),
   };
+  const notifications = { send: vi.fn().mockResolvedValue(undefined) };
 
   const itemIntegrity = new OrderItemIntegrityService(repo as any);
   const pricing = new OrderPricingService();
@@ -47,7 +50,13 @@ describe('OrderService customer visibility', () => {
     pricing,
     shipping,
   );
-  const service = new OrderService(repo as any, integrity, stock as any, emails as any);
+  const service = new OrderService(
+    repo as any,
+    integrity,
+    stock as any,
+    emails as any,
+    notifications as any,
+  );
 
   const adminUser = {
     sub: 'user-admin',

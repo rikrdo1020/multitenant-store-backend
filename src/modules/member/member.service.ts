@@ -9,6 +9,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ResendService } from '../../lib/resend/resend.service';
+import { NotificationService } from '../notification/notification.service';
 import { InviteMemberDto } from './dto/invite-member.dto';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
 import { EmailAction, UserRole } from '@prisma/client';
@@ -27,6 +28,7 @@ export class MemberService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly resend: ResendService,
+    private readonly notifications: NotificationService,
   ) {}
 
   async findAll(tenantId: string) {
@@ -119,6 +121,18 @@ export class MemberService {
         },
       });
     });
+
+    if (existingUser) {
+      void this.notifications
+        .send({
+          userId: existingUser.id,
+          title: 'Invitación de equipo recibida',
+          body: `Te invitaron a unirte a ${tenant.name}`,
+          type: 'team_invitation',
+          metadata: { tenantId: tenant.id, tenantName: tenant.name, role },
+        })
+        .catch(() => undefined);
+    }
 
     const inviteUrl = this.buildUrlWithToken(this.config.getOrThrow<string>('TEAM_INVITE_URL'), rawToken);
 

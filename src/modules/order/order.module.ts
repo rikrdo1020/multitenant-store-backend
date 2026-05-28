@@ -8,8 +8,10 @@ import { OrderPricingService } from './order-pricing.service';
 import { OrderItemIntegrityService } from './order-item-integrity.service';
 import { OrderShippingIntegrityService } from './order-shipping-integrity.service';
 import { OrderEmailService } from './order-email.service';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
+  imports: [NotificationModule],
   controllers: [OrderController],
   providers: [
     OrderService,
