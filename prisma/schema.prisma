@@ -51,6 +51,23 @@ enum PaymentProvider {
   mercadopago
 }
 
+enum EmailAction {
+  password_reset
+  member_invite
+  order_created_customer
+  order_created_admin
+  payment_confirmed
+  order_status_changed
+}
+
+enum EmailDeliveryStatus {
+  attempted
+  sent
+  failed
+  blocked
+  skipped
+}
+
 // ---------------------------------------------------------------------------
 // Core models
 // ---------------------------------------------------------------------------
@@ -63,6 +80,7 @@ model User {
   phone        String?
   role         UserRole @default(manager)
   isActive     Boolean  @default(true)
+  tokenVersion Int      @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -93,6 +111,26 @@ model PasswordResetToken {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+model EmailDelivery {
+  id            String              @id @default(cuid())
+  action        EmailAction
+  status        EmailDeliveryStatus @default(attempted)
+  recipientHash String
+  actorHash     String?
+  tenantId      String?
+  dedupeKeyHash String?             @unique
+  reason        String?
+  errorMessage  String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@index([action, recipientHash, createdAt])
+  @@index([action, actorHash, createdAt])
+  @@index([action, tenantId, createdAt])
+  @@index([status, createdAt])
+  @@index([createdAt])
 }
 
 model Tenant {

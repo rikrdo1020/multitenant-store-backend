@@ -62,6 +62,14 @@ Server starts at `http://localhost:3000`. All routes are prefixed with `/api/v1`
 | `RESEND_API_KEY` | Resend API key |
 | `RESEND_FROM_EMAIL` | Default verified sender email for transactional emails |
 | `RESEND_FROM_NAME` | Default sender display name for transactional emails |
+| `EMAIL_ALLOWED_DEEP_LINK_SCHEMES` | Comma-separated approved deep link schemes for auth emails |
+| `EMAIL_RECIPIENT_WINDOW_MINUTES` | Per-recipient email/rate-limit window in minutes |
+| `EMAIL_RECIPIENT_WINDOW_LIMIT` | Max attempts per recipient/action within the window |
+| `EMAIL_ACTOR_WINDOW_MINUTES` | Per-actor email/rate-limit window in minutes |
+| `EMAIL_ACTOR_WINDOW_LIMIT` | Max attempts per actor/action within the window |
+| `EMAIL_TENANT_DAILY_LIMIT` | Max tenant-scoped transactional email attempts per day |
+| `EMAIL_HOURLY_SEND_LIMIT` | Global hourly send budget guard for Resend |
+| `EMAIL_DAILY_SEND_LIMIT` | Global daily send budget guard for Resend |
 | `FRONTEND_URL` | Frontend URL for CORS |
 | `PASSWORD_RESET_URL` | Native deep link base for password reset emails, e.g. `multitenant://reset-password` |
 | `TEAM_INVITE_URL` | Native deep link base for team invitation emails, e.g. `multitenant://invite` |

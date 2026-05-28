@@ -17,6 +17,7 @@ import {
   generateOrderViewToken,
   hashOrderViewToken,
 } from './order-view-token';
+import { OrderEmailService } from './order-email.service';
 
 @Injectable()
 export class OrderService {
@@ -24,6 +25,7 @@ export class OrderService {
     private readonly repo: OrderRepository,
     private readonly integrity: OrderIntegrityService,
     private readonly stock: OrderStockService,
+    private readonly emails: OrderEmailService,
   ) {}
 
   async findAll(tenantId: string, filter: OrderListFilter = {}) {
@@ -163,6 +165,7 @@ export class OrderService {
       trustedOrder.items,
     );
 
+    await this.emails.sendOrderCreated(order);
     return this.serializeOrder(order, { viewToken });
   }
 
@@ -195,6 +198,7 @@ export class OrderService {
       ...(dto.dispatched !== undefined && { dispatched: dto.dispatched }),
     });
 
+    await this.emails.sendOrderStatusNotification(updated);
     return this.serializeOrder(updated);
   }
 

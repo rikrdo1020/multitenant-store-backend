@@ -28,6 +28,10 @@ describe('OrderService order integrity', () => {
     createOrderWithStockReservation: vi.fn(),
     transitionOrderStatusById: vi.fn(),
   };
+  const emails = {
+    sendOrderCreated: vi.fn(),
+    sendOrderStatusNotification: vi.fn(),
+  };
 
   const itemIntegrity = new OrderItemIntegrityService(repo as any);
   const pricing = new OrderPricingService();
@@ -38,7 +42,7 @@ describe('OrderService order integrity', () => {
     pricing,
     shipping,
   );
-  const service = new OrderService(repo as any, integrity, stock as any);
+  const service = new OrderService(repo as any, integrity, stock as any, emails as any);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -46,6 +50,7 @@ describe('OrderService order integrity', () => {
     repo.findProductsByIds.mockResolvedValue([publishedProduct()]);
     repo.findActiveShippingMethodById.mockResolvedValue(activeShippingMethod());
     repo.findActiveCombos.mockResolvedValue([]);
+    emails.sendOrderCreated.mockResolvedValue(undefined);
     stock.createOrderWithStockReservation.mockImplementation(
       async (_tenantId, data) => ({
         id: 'order-1',

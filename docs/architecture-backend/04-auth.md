@@ -13,6 +13,7 @@ Two token types:
   sub: string;       // userId
   role: UserRole;    // superadmin | admin | manager
   tenantId?: string; // current active tenant (for admin tokens)
+  tokenVersion: number; // incremented on password reset to revoke old access tokens
   type: "access";
   iat: number;
   exp: number;
@@ -96,6 +97,9 @@ The JWT role is derived from `User.role` only for platform `superadmin`; tenant 
 - Minimum 8 characters
 - Bcrypt hashing with 12 salt rounds
 - Password reset via secure token (Resend email, 1-hour expiry)
+- `POST /auth/forgot-password` returns the same public success response whether the email exists or not to avoid email enumeration.
+- Password reset requests and reset submissions are rate-limited through the email/security guard.
+- Password reset increments `User.tokenVersion`; JWT validation rejects older access tokens after the reset.
 - `mustChangePassword` flag forces password change on next login
 
 ## Token Storage (Backend)
@@ -112,7 +116,7 @@ model RefreshToken {
 ```
 
 On logout: delete refresh token record.
-On password change: revoke all refresh tokens for the user.
+On password change: revoke all refresh tokens for the user and increment `User.tokenVersion` so existing access tokens are rejected.
 
 ## Security Headers
 

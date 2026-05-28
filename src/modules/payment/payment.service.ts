@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OrderStatus } from '@prisma/client';
 import { OrderRepository } from '../order/order.repository';
+import { OrderEmailService } from '../order/order-email.service';
 import { OrderStockService } from '../order/order-stock.service';
 import { hashOrderViewToken } from '../order/order-view-token';
 import { CreatePaymentDto } from './dto/create-payment.dto';
@@ -24,6 +25,7 @@ export class PaymentService {
     private readonly orders: OrderRepository,
     private readonly configService: ConfigService,
     private readonly orderStockService: OrderStockService,
+    private readonly orderEmailService: OrderEmailService,
   ) {
     this.register(yappyProvider);
     this.register(cashProvider);
@@ -70,13 +72,16 @@ export class PaymentService {
     });
 
     if (provider === 'cash') {
-      await this.orderStockService.transitionOrderStatusByOrderId(
+      const paidOrder = await this.orderStockService.transitionOrderStatusByOrderId(
         dto.orderId,
         tenantId,
         {
           orderStatus: OrderStatus.paid,
         },
       );
+      if (paidOrder) {
+        await this.orderEmailService.sendOrderStatusNotification(paidOrder);
+      }
     }
 
     if (
@@ -86,7 +91,7 @@ export class PaymentService {
       this.logger.log(
         `[MOCK] Simulating Yappy webhook - marking order ${dto.orderId} as paid`,
       );
-      await this.orderStockService.transitionOrderStatusByOrderId(
+      const paidOrder = await this.orderStockService.transitionOrderStatusByOrderId(
         dto.orderId,
         tenantId,
         {
@@ -96,6 +101,9 @@ export class PaymentService {
             : {}),
         },
       );
+      if (paidOrder) {
+        await this.orderEmailService.sendOrderStatusNotification(paidOrder);
+      }
     }
 
     return {

@@ -62,8 +62,11 @@ Order creation flow:
 4. Generate `orderId = "ORD-{Date.now()}"`
 5. Create `Customer` record if email not found in tenant
 6. Create `Order` with status `pending`
-7. Initialize payment with configured provider
-8. Return order + payment credentials to client
+7. Send non-blocking transactional emails: customer order-created email and store/admin new-order notification
+8. Initialize payment with configured provider
+9. Return order + payment credentials to client
+
+Transactional email failures must be observable in logs/email delivery records, but they must not roll back order creation, payment confirmation, or webhook status updates.
 
 ## Shipping (BT-06)
 

@@ -21,6 +21,7 @@ describe('PaymentService', () => {
   let orders: ReturnType<typeof makeOrderRepository>;
   let stock: ReturnType<typeof makeOrderStockService>;
   let config: ReturnType<typeof makeConfigService>;
+  let emails: ReturnType<typeof makeOrderEmailService>;
 
   beforeEach(() => {
     yappyProvider = makeProvider('yappy') as unknown as YappyProvider;
@@ -28,12 +29,14 @@ describe('PaymentService', () => {
     orders = makeOrderRepository();
     stock = makeOrderStockService();
     config = makeConfigService();
+    emails = makeOrderEmailService();
     service = new PaymentService(
       yappyProvider,
       cashProvider,
       orders as any,
       config as any,
       stock as any,
+      emails as any,
     );
   });
 
@@ -136,6 +139,9 @@ describe('PaymentService', () => {
           orderStatus: OrderStatus.paid,
         },
       );
+      expect(emails.sendOrderStatusNotification).toHaveBeenCalledWith({
+        id: 'order-1',
+      });
     });
 
     it('marks Yappy mock order paid through stock lifecycle service', async () => {
@@ -158,6 +164,9 @@ describe('PaymentService', () => {
           transactionId: 'MOCK-TXN-1',
         },
       );
+      expect(emails.sendOrderStatusNotification).toHaveBeenCalledWith({
+        id: 'order-1',
+      });
     });
   });
 });
@@ -182,5 +191,11 @@ function makeOrderStockService() {
     transitionOrderStatusByOrderId: vi
       .fn()
       .mockResolvedValue({ id: 'order-1' }),
+  };
+}
+
+function makeOrderEmailService() {
+  return {
+    sendOrderStatusNotification: vi.fn().mockResolvedValue(undefined),
   };
 }

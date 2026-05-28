@@ -156,9 +156,11 @@ Same shape as login.
 ```json
 {
   "success": true,
-  "data": { "message": "Email enviado" }
+  "data": { "message": "If the email exists, password reset instructions were sent." }
 }
 ```
+
+The response is intentionally generic so clients cannot enumerate registered emails.
 
 ### POST `/auth/reset-password`
 
@@ -177,6 +179,8 @@ Same shape as login.
   "data": { "message": "Contraseña actualizada" }
 }
 ```
+
+Password reset revokes refresh sessions and invalidates older access tokens through `tokenVersion`.
 
 ---
 

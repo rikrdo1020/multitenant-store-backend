@@ -32,7 +32,14 @@ describe('AuthService login roles', () => {
   };
 
   const resend = {};
-  const service = new AuthService(prisma as any, jwt as any, config as any, resend as any);
+  const emailSecurity = {};
+  const service = new AuthService(
+    prisma as any,
+    jwt as any,
+    config as any,
+    resend as any,
+    emailSecurity as any,
+  );
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -51,6 +58,7 @@ describe('AuthService login roles', () => {
       passwordHash: await bcrypt.hash('secure-password', 4),
       role: UserRole.superadmin,
       isActive: true,
+      tokenVersion: 0,
       tenants: [],
     });
 
@@ -66,6 +74,7 @@ describe('AuthService login roles', () => {
         sub: 'user-superadmin',
         role: UserRole.superadmin,
         tenantId: undefined,
+        tokenVersion: 0,
         type: 'access',
       }),
       expect.any(Object),
@@ -81,6 +90,7 @@ describe('AuthService login roles', () => {
       passwordHash: await bcrypt.hash('secure-password', 4),
       role: UserRole.manager,
       isActive: true,
+      tokenVersion: 2,
       tenants: [{ role: UserRole.admin, tenantId: 'tenant-1' }],
     });
     prisma.tenant.findUnique.mockResolvedValue({
@@ -108,6 +118,7 @@ describe('AuthService login roles', () => {
         sub: 'user-admin',
         role: UserRole.admin,
         tenantId: 'tenant-1',
+        tokenVersion: 2,
         type: 'access',
       }),
       expect.any(Object),
@@ -126,6 +137,7 @@ describe('AuthService login roles', () => {
       passwordHash: 'hash',
       role: UserRole.superadmin,
       isActive: true,
+      tokenVersion: 3,
       tenants: [],
     });
 
@@ -136,6 +148,7 @@ describe('AuthService login roles', () => {
         sub: 'user-superadmin',
         role: UserRole.superadmin,
         tenantId: undefined,
+        tokenVersion: 3,
         type: 'access',
       }),
       expect.any(Object),

@@ -41,6 +41,14 @@ CLOUDINARY_API_SECRET=
 RESEND_API_KEY=
 RESEND_FROM_EMAIL=                    # e.g. noreply@multitenant.app
 RESEND_FROM_NAME=                     # e.g. MultiTenant Store
+EMAIL_ALLOWED_DEEP_LINK_SCHEMES=multitenant
+EMAIL_RECIPIENT_WINDOW_MINUTES=15
+EMAIL_RECIPIENT_WINDOW_LIMIT=3
+EMAIL_ACTOR_WINDOW_MINUTES=15
+EMAIL_ACTOR_WINDOW_LIMIT=10
+EMAIL_TENANT_DAILY_LIMIT=200
+EMAIL_HOURLY_SEND_LIMIT=100
+EMAIL_DAILY_SEND_LIMIT=500
 
 # Dev only
 PAYMENT_MOCK=false                    # true = mock all payment providers
@@ -109,3 +117,5 @@ CMD ["node", "dist/index.js"]
 6. Rate limiting recommended on `/auth/login` and `/orders`.
 7. Cloudinary upload should validate file type and size server-side.
 8. Database connections use SSL in production.
+9. `PASSWORD_RESET_URL` and `TEAM_INVITE_URL` must be HTTPS in production unless they use an approved native deep link scheme from `EMAIL_ALLOWED_DEEP_LINK_SCHEMES`.
+10. Transactional email sends are guarded by per-recipient, per-actor, per-tenant, hourly, and daily limits before calling Resend.

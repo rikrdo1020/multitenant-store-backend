@@ -40,16 +40,24 @@ function makeOrderStockService() {
   };
 }
 
+function makeOrderEmailService() {
+  return {
+    sendOrderStatusNotification: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
 describe('WebhookService - handleYappy', () => {
   let service: WebhookService;
   let prisma: ReturnType<typeof makePrisma>;
   let stock: ReturnType<typeof makeOrderStockService>;
+  let emails: ReturnType<typeof makeOrderEmailService>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     prisma = makePrisma();
     stock = makeOrderStockService();
-    service = new WebhookService(makeConfigService(), stock as any);
+    emails = makeOrderEmailService();
+    service = new WebhookService(makeConfigService(), stock as any, emails as any);
   });
 
   it('throws UnauthorizedException when hash is invalid', async () => {
@@ -63,6 +71,7 @@ describe('WebhookService - handleYappy', () => {
     ).rejects.toThrow(UnauthorizedException);
 
     expect(stock.transitionOrderStatusByOrderId).not.toHaveBeenCalled();
+    expect(emails.sendOrderStatusNotification).not.toHaveBeenCalled();
   });
 
   it('updates order status to paid for status "E"', async () => {
@@ -81,6 +90,9 @@ describe('WebhookService - handleYappy', () => {
       {
         orderStatus: OrderStatus.paid,
       },
+    );
+    expect(emails.sendOrderStatusNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'order-db-id' }),
     );
   });
 
@@ -165,12 +177,14 @@ describe('WebhookService - handleStripe', () => {
   let service: WebhookService;
   let prisma: ReturnType<typeof makePrisma>;
   let stock: ReturnType<typeof makeOrderStockService>;
+  let emails: ReturnType<typeof makeOrderEmailService>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     prisma = makePrisma();
     stock = makeOrderStockService();
-    service = new WebhookService(makeConfigService(), stock as any);
+    emails = makeOrderEmailService();
+    service = new WebhookService(makeConfigService(), stock as any, emails as any);
   });
 
   it('marks order paid on payment_intent.succeeded', async () => {
@@ -189,6 +203,9 @@ describe('WebhookService - handleStripe', () => {
         orderStatus: OrderStatus.paid,
         transactionId: 'pi_123',
       },
+    );
+    expect(emails.sendOrderStatusNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'order-db-id' }),
     );
   });
 

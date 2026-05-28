@@ -1,5 +1,5 @@
 import { ConflictException, Logger } from '@nestjs/common';
-import { UserRole } from '@prisma/client';
+import { EmailAction, UserRole } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as crypto from 'crypto';
 import { MemberService } from './member.service';
@@ -87,6 +87,12 @@ describe('MemberService invitations', () => {
       'Demo Store',
       UserRole.manager,
       'Owner',
+      expect.objectContaining({
+        action: EmailAction.member_invite,
+        recipient: 'member@example.com',
+        actorKey: 'owner-1',
+        tenantId: 'tenant-1',
+      }),
     );
   });
 

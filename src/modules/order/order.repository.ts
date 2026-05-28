@@ -128,6 +128,26 @@ export class OrderRepository {
     });
   }
 
+  findTenantEmailContext(tenantId: string) {
+    return this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: {
+        id: true,
+        slug: true,
+        name: true,
+        owner: { select: { email: true, name: true } },
+        settings: { select: { emailFrom: true, emailFromName: true, currency: true } },
+        members: {
+          where: { user: { isActive: true } },
+          select: {
+            role: true,
+            user: { select: { email: true, name: true } },
+          },
+        },
+      },
+    });
+  }
+
   upsertCustomerFromOrder(tenantId: string, customer: OrderCustomerSnapshot) {
     return this.prisma.customer.upsert({
       where: { email_tenantId: { email: customer.email, tenantId } },

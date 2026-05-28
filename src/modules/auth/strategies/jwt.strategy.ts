@@ -11,6 +11,7 @@ export interface JwtPayload {
   email: string;
   role: UserRole;
   tenantId?: string;
+  tokenVersion?: number;
   type: 'access';
   iat?: number;
   exp?: number;
@@ -37,11 +38,15 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
 
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, isActive: true },
+      select: { id: true, isActive: true, tokenVersion: true },
     });
 
     if (!user || !user.isActive) {
       throw new UnauthorizedException({ code: 'ACCOUNT_INACTIVE', message: 'Account is inactive or not found' });
+    }
+
+    if ((payload.tokenVersion ?? 0) !== user.tokenVersion) {
+      throw new UnauthorizedException({ code: 'TOKEN_REVOKED', message: 'Access token has been revoked' });
     }
 
     const tenant = req.tenant;

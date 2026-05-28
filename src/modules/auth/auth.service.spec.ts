@@ -1,4 +1,5 @@
-import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Logger } from '@nestjs/common';
+import { EmailAction } from '@prisma/client';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import * as crypto from 'crypto';
 import { AuthService } from './auth.service';
@@ -16,6 +17,7 @@ describe('AuthService password recovery', () => {
     passwordResetToken: {
       updateMany: vi.fn(),
       create: vi.fn(),
+      findFirst: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
     },
@@ -46,7 +48,17 @@ describe('AuthService password recovery', () => {
     sendPasswordReset: vi.fn(),
   };
 
-  const service = new AuthService(prisma as any, jwt as any, config as any, resend as any);
+  const emailSecurity = {
+    recordActionAttempt: vi.fn(),
+  };
+
+  const service = new AuthService(
+    prisma as any,
+    jwt as any,
+    config as any,
+    resend as any,
+    emailSecurity as any,
+  );
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -60,7 +72,9 @@ describe('AuthService password recovery', () => {
     });
     prisma.user.update.mockReturnValue({ operation: 'user.update' });
     prisma.passwordResetToken.updateMany.mockResolvedValue({ count: 1 });
+    prisma.passwordResetToken.findFirst.mockResolvedValue(null);
     prisma.refreshToken.deleteMany.mockReturnValue({ operation: 'refreshToken.deleteMany' });
+    emailSecurity.recordActionAttempt.mockResolvedValue(undefined);
   });
 
   it('GIVEN a registered email WHEN forgot password runs SHOULD store only a hashed reset token and email the raw token link', async () => {
@@ -85,16 +99,27 @@ describe('AuthService password recovery', () => {
     expect(createCall.data.tokenHash).toBe(hashToken(tokenFromUrl!));
     expect(createCall.data.tokenHash).not.toBe(tokenFromUrl);
     expect(createCall.data.expiresAt.getTime()).toBeGreaterThan(Date.now());
-    expect(resend.sendPasswordReset).toHaveBeenCalledWith('owner@example.com', expect.stringContaining('multitenant://reset-password?token='));
+    expect(emailSecurity.recordActionAttempt).not.toHaveBeenCalled();
+    expect(resend.sendPasswordReset).toHaveBeenCalledWith(
+      'owner@example.com',
+      expect.stringContaining('multitenant://reset-password?token='),
+      expect.objectContaining({
+        action: EmailAction.password_reset,
+        recipient: 'owner@example.com',
+        actorKey: 'owner@example.com',
+      }),
+    );
   });
 
-  it('GIVEN an unknown email WHEN forgot password runs SHOULD return the selected email-not-found error', async () => {
+  it('GIVEN an unknown email WHEN forgot password runs SHOULD return generically without sending email', async () => {
     prisma.user.findUnique.mockResolvedValue(null);
 
-    await expect(service.forgotPassword('missing@example.com')).rejects.toBeInstanceOf(NotFoundException);
-    await expect(service.forgotPassword('missing@example.com')).rejects.toMatchObject({
-      response: { code: 'PASSWORD_RESET_EMAIL_NOT_FOUND' },
-    });
+    await expect(service.forgotPassword('missing@example.com')).resolves.toBeUndefined();
+    expect(emailSecurity.recordActionAttempt).toHaveBeenCalledWith({
+      action: EmailAction.password_reset,
+      recipient: 'missing@example.com',
+      actorKey: 'missing@example.com',
+    }, 'PASSWORD_RESET_UNKNOWN_EMAIL');
     expect(prisma.passwordResetToken.create).not.toHaveBeenCalled();
     expect(resend.sendPasswordReset).not.toHaveBeenCalled();
   });
@@ -169,9 +194,14 @@ describe('AuthService password recovery', () => {
     });
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: 'user-1' },
-      data: { passwordHash: expect.any(String) },
+      data: { passwordHash: expect.any(String), tokenVersion: { increment: 1 } },
     });
     expect(prisma.refreshToken.deleteMany).toHaveBeenCalledWith({ where: { userId: 'user-1' } });
+    expect(emailSecurity.recordActionAttempt).toHaveBeenCalledWith({
+      action: EmailAction.password_reset,
+      recipient: hashToken('raw-token'),
+      actorKey: hashToken('raw-token'),
+    }, 'PASSWORD_RESET_SUBMIT');
   });
 
   it('GIVEN a token claimed by another request WHEN reset password runs SHOULD reject without updating the password', async () => {

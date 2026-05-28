@@ -3,7 +3,6 @@ import {
   ConflictException,
   Injectable,
   Logger,
-  NotFoundException,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -15,9 +14,11 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterInviteDto } from './dto/register-invite.dto';
 import * as bcrypt from 'bcryptjs';
-import { UserRole } from '@prisma/client';
+import { EmailAction, UserRole } from '@prisma/client';
 import { JwtPayload } from './strategies/jwt.strategy';
 import * as crypto from 'crypto';
+import { EmailSecurityService } from '../../lib/resend/email-security.service';
+import { maskEmail, normalizeEmail } from '../../common/utils/privacy';
 
 const BCRYPT_ROUNDS = 12;
 const PASSWORD_RESET_TOKEN_BYTES = 32;
@@ -32,6 +33,7 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly resend: ResendService,
+    private readonly emailSecurity: EmailSecurityService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -56,7 +58,7 @@ export class AuthService {
       select: { id: true, email: true, name: true, createdAt: true },
     });
 
-    this.logger.log(`New user registered: ${user.email}`);
+    this.logger.log(`New user registered: ${maskEmail(user.email)}`);
     return user;
   }
 
@@ -91,7 +93,7 @@ export class AuthService {
     const primaryTenantId = user.tenants[0]?.tenantId;
 
     const [accessToken, refreshToken, rawTenant] = await Promise.all([
-      this.signAccessToken(user.id, user.email, role, primaryTenantId),
+      this.signAccessToken(user.id, user.email, role, primaryTenantId, user.tokenVersion),
       this.signAndStoreRefreshToken(user.id),
       primaryTenantId
         ? this.prisma.tenant.findUnique({
@@ -155,7 +157,7 @@ export class AuthService {
     const primaryTenantId = user.tenants[0]?.tenantId;
 
     const [accessToken, newRefreshToken] = await Promise.all([
-      this.signAccessToken(user.id, user.email, role, primaryTenantId),
+      this.signAccessToken(user.id, user.email, role, primaryTenantId, user.tokenVersion),
       this.signAndStoreRefreshToken(user.id),
     ]);
 
@@ -176,12 +178,33 @@ export class AuthService {
   // ---------------------------------------------------------------------------
 
   async forgotPassword(email: string): Promise<void> {
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const normalizedEmail = normalizeEmail(email);
+    const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (!user) {
-      throw new NotFoundException({
-        code: 'PASSWORD_RESET_EMAIL_NOT_FOUND',
-        message: 'Email not found',
-      });
+      await this.emailSecurity.recordActionAttempt({
+        action: EmailAction.password_reset,
+        recipient: normalizedEmail,
+        actorKey: normalizedEmail,
+      }, 'PASSWORD_RESET_UNKNOWN_EMAIL');
+      return;
+    }
+
+    const recentToken = await this.prisma.passwordResetToken.findFirst({
+      where: {
+        userId: user.id,
+        usedAt: null,
+        expiresAt: { gt: new Date() },
+        createdAt: { gte: new Date(Date.now() - 60 * 1000) },
+      },
+      select: { id: true },
+    });
+    if (recentToken) {
+      await this.emailSecurity.recordActionAttempt({
+        action: EmailAction.password_reset,
+        recipient: normalizedEmail,
+        actorKey: normalizedEmail,
+      }, 'PASSWORD_RESET_RECENT_REQUEST');
+      return;
     }
 
     const resetToken = crypto.randomBytes(PASSWORD_RESET_TOKEN_BYTES).toString('hex');
@@ -205,11 +228,16 @@ export class AuthService {
     const resetUrl = this.buildUrlWithToken(resetUrlBase, resetToken);
 
     try {
-      await this.resend.sendPasswordReset(email, resetUrl);
+      await this.resend.sendPasswordReset(normalizedEmail, resetUrl, {
+        action: EmailAction.password_reset,
+        recipient: normalizedEmail,
+        actorKey: normalizedEmail,
+        dedupeKey: tokenHash,
+      });
     } catch (error) {
       await this.invalidatePasswordResetToken(tokenHash);
       this.logger.error(
-        `Password reset email delivery failed for ${email}`,
+        `Password reset email delivery failed for ${maskEmail(normalizedEmail)}`,
         error instanceof Error ? error.stack : undefined,
       );
       throw new ServiceUnavailableException({
@@ -221,6 +249,12 @@ export class AuthService {
 
   async resetPassword(token: string, newPassword: string): Promise<void> {
     const tokenHash = this.hashToken(token);
+    await this.emailSecurity.recordActionAttempt({
+      action: EmailAction.password_reset,
+      recipient: tokenHash,
+      actorKey: tokenHash,
+    }, 'PASSWORD_RESET_SUBMIT');
+
     const stored = await this.prisma.passwordResetToken.findUnique({ where: { tokenHash } });
 
     if (!stored || stored.usedAt) {
@@ -249,7 +283,7 @@ export class AuthService {
 
       await tx.user.update({
         where: { id: stored.userId },
-        data: { passwordHash },
+        data: { passwordHash, tokenVersion: { increment: 1 } },
       });
 
       // Revoke active auth sessions on password change.
@@ -381,12 +415,14 @@ export class AuthService {
     email: string,
     role: UserRole,
     tenantId?: string,
+    tokenVersion = 0,
   ): string {
     const payload: Omit<JwtPayload, 'iat' | 'exp'> = {
       sub,
       email,
       role,
       tenantId,
+      tokenVersion,
       type: 'access',
     };
     return this.jwt.sign(payload, {

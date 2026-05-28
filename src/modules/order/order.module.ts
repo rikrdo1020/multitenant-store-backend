@@ -7,6 +7,7 @@ import { OrderStockService } from './order-stock.service';
 import { OrderPricingService } from './order-pricing.service';
 import { OrderItemIntegrityService } from './order-item-integrity.service';
 import { OrderShippingIntegrityService } from './order-shipping-integrity.service';
+import { OrderEmailService } from './order-email.service';
 
 @Module({
   controllers: [OrderController],
@@ -17,8 +18,9 @@ import { OrderShippingIntegrityService } from './order-shipping-integrity.servic
     OrderPricingService,
     OrderShippingIntegrityService,
     OrderStockService,
+    OrderEmailService,
     OrderRepository,
   ],
-  exports: [OrderRepository, OrderStockService],
+  exports: [OrderRepository, OrderStockService, OrderEmailService],
 })
 export class OrderModule {}

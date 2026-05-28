@@ -2,6 +2,7 @@ import * as crypto from 'crypto';
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OrderStatus } from '@prisma/client';
+import { OrderEmailService } from '../order/order-email.service';
 import { OrderStockService } from '../order/order-stock.service';
 
 export interface StripeWebhookEvent {
@@ -57,6 +58,7 @@ export class WebhookService {
   constructor(
     private readonly configService: ConfigService,
     private readonly orderStockService: OrderStockService,
+    private readonly orderEmailService: OrderEmailService,
   ) {}
 
   async handleStripe(
@@ -112,6 +114,7 @@ export class WebhookService {
     }
 
     const mappedStatus = mapYappyStatus(params.status);
+    await this.orderEmailService.sendOrderStatusNotification(order);
 
     this.logger.log(
       `Yappy webhook: order ORD-${params.orderId} -> ${mappedStatus}`,
@@ -131,7 +134,7 @@ export class WebhookService {
       return;
     }
 
-    await this.orderStockService.transitionOrderStatusByOrderId(
+    const order = await this.orderStockService.transitionOrderStatusByOrderId(
       orderId,
       tenantId,
       {
@@ -139,6 +142,9 @@ export class WebhookService {
         transactionId,
       },
     );
+    if (order) {
+      await this.orderEmailService.sendOrderStatusNotification(order);
+    }
 
     this.logger.log(`Order ${orderId} marked as paid (txn: ${transactionId})`);
   }
@@ -151,13 +157,16 @@ export class WebhookService {
     const orderId = metadata?.['orderId'];
     if (!orderId) return;
 
-    await this.orderStockService.transitionOrderStatusByOrderId(
+    const order = await this.orderStockService.transitionOrderStatusByOrderId(
       orderId,
       tenantId,
       {
         orderStatus: OrderStatus.failed,
       },
     );
+    if (order) {
+      await this.orderEmailService.sendOrderStatusNotification(order);
+    }
 
     this.logger.warn(`Order ${orderId} payment failed`);
   }
@@ -170,12 +179,15 @@ export class WebhookService {
     const orderId = metadata?.['orderId'];
     if (!orderId) return;
 
-    await this.orderStockService.transitionOrderStatusByOrderId(
+    const order = await this.orderStockService.transitionOrderStatusByOrderId(
       orderId,
       tenantId,
       { orderStatus: OrderStatus.expired },
       { onlyFrom: [OrderStatus.pending] },
     );
+    if (order) {
+      await this.orderEmailService.sendOrderStatusNotification(order);
+    }
 
     this.logger.log(`Order ${orderId} expired`);
   }

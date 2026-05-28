@@ -63,7 +63,17 @@ describe('AuthService invitation registration', () => {
     sendPasswordReset: vi.fn(),
   };
 
-  const service = new AuthService(prisma as any, jwt as any, config as any, resend as any);
+  const emailSecurity = {
+    recordActionAttempt: vi.fn(),
+  };
+
+  const service = new AuthService(
+    prisma as any,
+    jwt as any,
+    config as any,
+    resend as any,
+    emailSecurity as any,
+  );
 
   beforeEach(() => {
     vi.clearAllMocks();

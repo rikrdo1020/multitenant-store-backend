@@ -33,6 +33,10 @@ describe('OrderService customer visibility', () => {
     createOrderWithStockReservation: vi.fn(),
     transitionOrderStatusById: vi.fn(),
   };
+  const emails = {
+    sendOrderCreated: vi.fn(),
+    sendOrderStatusNotification: vi.fn(),
+  };
 
   const itemIntegrity = new OrderItemIntegrityService(repo as any);
   const pricing = new OrderPricingService();
@@ -43,7 +47,7 @@ describe('OrderService customer visibility', () => {
     pricing,
     shipping,
   );
-  const service = new OrderService(repo as any, integrity, stock as any);
+  const service = new OrderService(repo as any, integrity, stock as any, emails as any);
 
   const adminUser = {
     sub: 'user-admin',
@@ -64,6 +68,8 @@ describe('OrderService customer visibility', () => {
     repo.count.mockResolvedValue(0);
     repo.hasTenantMembership.mockResolvedValue(null);
     repo.findActiveCombos.mockResolvedValue([]);
+    emails.sendOrderCreated.mockResolvedValue(undefined);
+    emails.sendOrderStatusNotification.mockResolvedValue(undefined);
     repo.findProductsByIds.mockResolvedValue([
       {
         id: 'prod-1',
@@ -206,6 +212,9 @@ describe('OrderService customer visibility', () => {
     );
     expect(result.viewToken).toEqual(expect.any(String));
     expect(result.viewTokenHash).toBeUndefined();
+    expect(emails.sendOrderCreated).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: expect.any(String) }),
+    );
   });
 
   it('GIVEN valid tracking token WHEN reading public order SHOULD hash token and return order without hash', async () => {
