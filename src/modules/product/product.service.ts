@@ -53,7 +53,7 @@ export class ProductService {
   }
 
   async create(tenantId: string, dto: CreateProductDto) {
-    const existing = await this.repo.findBySlug(dto.slug, tenantId);
+    const existing = await this.repo.findBySlug(dto.slug, tenantId, false);
     if (existing) {
       throw new ConflictException({ code: 'SLUG_TAKEN', message: `Product slug '${dto.slug}' already exists` });
     }
