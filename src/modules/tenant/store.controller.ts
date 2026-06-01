@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Put, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { Tenant } from '@prisma/client';
 import { Public } from '../../common/decorators/roles.decorator';
 import { CurrentTenant } from '../../common/decorators/tenant.decorator';
@@ -6,6 +6,7 @@ import { CurrentUser } from '../../common/decorators/user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { serialize } from '../../common/utils/serializer';
 import { TenantService } from './tenant.service';
+import { CreateStoreDto } from './dto/create-store.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 
 @Controller('store')
@@ -31,6 +32,15 @@ export class StoreController {
   @Get('my-stores')
   myStores(@CurrentUser() user: { sub: string }) {
     return this.tenantService.findByOwner(user.sub);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post()
+  async createStore(
+    @CurrentUser() user: { sub: string },
+    @Body() dto: CreateStoreDto,
+  ) {
+    return this.tenantService.create({ ...dto, ownerId: user.sub });
   }
 
   @UseGuards(JwtAuthGuard)

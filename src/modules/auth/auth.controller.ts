@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
@@ -15,6 +16,8 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { RegisterInviteDto } from './dto/register-invite.dto';
 import { Public } from '../../common/decorators/roles.decorator';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { CurrentUser } from '../../common/decorators/user.decorator';
 
 @Controller('auth')
 export class AuthController {
@@ -76,5 +79,12 @@ export class AuthController {
   @HttpCode(HttpStatus.CREATED)
   registerInvite(@Body() dto: RegisterInviteDto) {
     return this.authService.registerInvite(dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('complete-onboarding')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async completeOnboarding(@CurrentUser() user: { sub: string }) {
+    await this.authService.completeOnboarding(user.sub);
   }
 }

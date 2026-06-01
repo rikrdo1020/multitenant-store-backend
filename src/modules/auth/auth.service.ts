@@ -53,11 +53,21 @@ export class AuthService {
         name: dto.name,
         phone: dto.phone,
       },
-      select: { id: true, email: true, name: true, createdAt: true },
+      select: { id: true, email: true, name: true, role: true, onboardingCompleted: true, createdAt: true },
     });
 
     this.logger.log(`New user registered: ${user.email}`);
-    return user;
+
+    const [accessToken, refreshToken] = await Promise.all([
+      Promise.resolve(this.signAccessToken(user.id, user.email, user.role)),
+      this.signAndStoreRefreshToken(user.id),
+    ]);
+
+    return {
+      accessToken,
+      refreshToken,
+      user: { id: user.id, email: user.email, name: user.name, role: user.role, onboardingCompleted: user.onboardingCompleted },
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -109,9 +119,20 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
-      user: { id: user.id, email: user.email, name: user.name, role },
+      user: { id: user.id, email: user.email, name: user.name, role, onboardingCompleted: user.onboardingCompleted },
       tenant,
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Onboarding
+  // ---------------------------------------------------------------------------
+
+  async completeOnboarding(userId: string): Promise<void> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { onboardingCompleted: true },
+    });
   }
 
   // ---------------------------------------------------------------------------

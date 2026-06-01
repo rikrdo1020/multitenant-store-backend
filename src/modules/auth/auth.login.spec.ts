@@ -51,6 +51,7 @@ describe('AuthService login roles', () => {
       passwordHash: await bcrypt.hash('secure-password', 4),
       role: UserRole.superadmin,
       isActive: true,
+      onboardingCompleted: true,
       tenants: [],
     });
 
@@ -81,6 +82,7 @@ describe('AuthService login roles', () => {
       passwordHash: await bcrypt.hash('secure-password', 4),
       role: UserRole.manager,
       isActive: true,
+      onboardingCompleted: false,
       tenants: [{ role: UserRole.admin, tenantId: 'tenant-1' }],
     });
     prisma.tenant.findUnique.mockResolvedValue({
@@ -98,10 +100,12 @@ describe('AuthService login roles', () => {
     });
 
     expect(result.user.role).toBe(UserRole.admin);
+    expect(result.user.onboardingCompleted).toBe(false);
     expect(result.tenant).toMatchObject({
       documentId: 'tenant-1',
       slug: 'demo-store',
       name: 'Demo Store',
+      plan: undefined,
     });
     expect(jwt.sign).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -126,6 +130,7 @@ describe('AuthService login roles', () => {
       passwordHash: 'hash',
       role: UserRole.superadmin,
       isActive: true,
+      onboardingCompleted: true,
       tenants: [],
     });
 
