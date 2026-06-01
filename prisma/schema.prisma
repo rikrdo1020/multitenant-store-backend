@@ -129,6 +129,7 @@ model Tenant {
   customDomain   String?         @unique
   plan           PlanType        @default(FREE)
   planActivatedAt DateTime?
+  whatsappPhone  String?
   ownerId        String
   owner          User            @relation("TenantOwner", fields: [ownerId], references: [id])
 

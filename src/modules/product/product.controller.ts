@@ -19,16 +19,24 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles, Public } from '../../common/decorators/roles.decorator';
 import { CurrentTenant } from '../../common/decorators/tenant.decorator';
-import { UserRole, Tenant } from '@prisma/client';
+import { UserRole, Tenant, ProductStatus } from '@prisma/client';
 
 @Controller('products')
 export class ProductController {
   constructor(private readonly productService: ProductService) {}
 
-  // Storefront — public
+  // Storefront — public (always published only)
   @Public()
   @Get()
   findAll(@CurrentTenant() tenant: Tenant, @Query() filter: ProductFilterDto) {
+    return this.productService.findAll(tenant.id, { ...filter, status: ProductStatus.published });
+  }
+
+  // Admin — all statuses, requires auth (declared before :slug to avoid param collision)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin, UserRole.manager, UserRole.superadmin)
+  @Get('admin/list')
+  findAllAdmin(@CurrentTenant() tenant: Tenant, @Query() filter: ProductFilterDto) {
     return this.productService.findAll(tenant.id, filter);
   }
 
