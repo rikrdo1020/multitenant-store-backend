@@ -32,6 +32,7 @@ const makeRepo = () => ({
   isSlugTaken: vi.fn(),
   count: vi.fn(),
   create: vi.fn(),
+  createWithOwner: vi.fn(),
   update: vi.fn(),
   updateStatus: vi.fn(),
 });
@@ -49,7 +50,7 @@ describe('TenantService', () => {
     it('GIVEN valid input SHOULD create tenant with plan = FREE by default', async () => {
       const created = makeTenant();
       repo.findBySlug.mockResolvedValue(null);
-      repo.create.mockResolvedValue(created);
+      repo.createWithOwner.mockResolvedValue(created);
 
       const result = await service.create({
         slug: 'my-store',
@@ -63,7 +64,7 @@ describe('TenantService', () => {
     it('GIVEN valid input SHOULD expose plan in serialized response', async () => {
       const created = makeTenant({ plan: 'FREE' });
       repo.findBySlug.mockResolvedValue(null);
-      repo.create.mockResolvedValue(created);
+      repo.createWithOwner.mockResolvedValue(created);
 
       const result = await service.create({ slug: 'my-store', name: 'My Store', ownerId: 'user_1' });
 

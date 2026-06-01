@@ -15,6 +15,7 @@ export interface CreateTenantInput {
   ownerId: string;
   description?: string;
   primaryColor?: string;
+  logo?: string;
 }
 
 @Injectable()
@@ -48,13 +49,17 @@ export class TenantService {
       throw new ConflictException({ code: 'SLUG_TAKEN', message: `Slug '${input.slug}' is already taken` });
     }
 
-    const tenant = await this.repo.create({
-      slug: input.slug,
-      name: input.name,
-      description: input.description,
-      primaryColor: input.primaryColor ?? '#000000',
-      owner: { connect: { id: input.ownerId } },
-    });
+    const tenant = await this.repo.createWithOwner(
+      {
+        slug: input.slug,
+        name: input.name,
+        description: input.description,
+        primaryColor: input.primaryColor ?? '#000000',
+        logo: input.logo,
+        owner: { connect: { id: input.ownerId } },
+      },
+      input.ownerId,
+    );
 
     return serialize(tenant);
   }
