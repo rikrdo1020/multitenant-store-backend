@@ -130,6 +130,8 @@ model Tenant {
   plan           PlanType        @default(FREE)
   planActivatedAt DateTime?
   whatsappPhone  String?
+  yappyPhone     String?
+  yappyName      String?
   ownerId        String
   owner          User            @relation("TenantOwner", fields: [ownerId], references: [id])
 
