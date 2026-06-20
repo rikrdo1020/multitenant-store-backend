@@ -17,6 +17,7 @@ describe('OrderService customer visibility', () => {
   const repo = {
     findMany: vi.fn(),
     count: vi.fn(),
+    findRecent: vi.fn(),
     findById: vi.fn(),
     findByIdForCustomerEmail: vi.fn(),
     findByOrderIdAndViewTokenHash: vi.fn(),
@@ -79,6 +80,7 @@ describe('OrderService customer visibility', () => {
     vi.clearAllMocks();
     repo.findMany.mockResolvedValue([]);
     repo.count.mockResolvedValue(0);
+    repo.findRecent.mockResolvedValue([]);
     repo.hasTenantMembership.mockResolvedValue(null);
     repo.findActiveCombos.mockResolvedValue([]);
     repo.findProductTenantIdsByIds.mockResolvedValue([]);
@@ -133,6 +135,61 @@ describe('OrderService customer visibility', () => {
       customerId: undefined,
       search: undefined,
     });
+  });
+
+  it('GIVEN tenant orders WHEN loading recent orders SHOULD return compact operational rows', async () => {
+    repo.findRecent.mockResolvedValue([
+      {
+        id: 'order-1',
+        orderId: 'ORD-1',
+        total: 35.5,
+        orderStatus: OrderStatus.ready,
+        paymentMethod: 'cash',
+        customerData: { name: 'Fallback Buyer', email: 'fallback@example.com' },
+        customer: { name: 'Buyer', email: 'buyer@example.com' },
+        createdAt: new Date('2026-06-01T10:00:00Z'),
+      },
+      {
+        id: 'order-2',
+        orderId: 'ORD-2',
+        total: 20,
+        orderStatus: OrderStatus.pending,
+        paymentMethod: 'yappy',
+        customerData: { name: 'Guest', email: 'guest@example.com' },
+        customer: null,
+        createdAt: new Date('2026-06-01T09:00:00Z'),
+      },
+    ]);
+
+    const result = await service.findRecent('tenant-1', 5);
+
+    expect(repo.findRecent).toHaveBeenCalledWith('tenant-1', 5);
+    expect(result).toEqual([
+      {
+        documentId: 'order-1',
+        orderId: 'ORD-1',
+        orderNumber: 'ORD-1',
+        customer: { name: 'Buyer', email: 'buyer@example.com' },
+        total: 35.5,
+        status: OrderStatus.ready,
+        orderStatus: OrderStatus.ready,
+        paymentStatus: 'paid',
+        paymentMethod: 'cash',
+        createdAt: new Date('2026-06-01T10:00:00Z'),
+      },
+      {
+        documentId: 'order-2',
+        orderId: 'ORD-2',
+        orderNumber: 'ORD-2',
+        customer: { name: 'Guest', email: 'guest@example.com' },
+        total: 20,
+        status: OrderStatus.pending,
+        orderStatus: OrderStatus.pending,
+        paymentStatus: 'pending',
+        paymentMethod: 'yappy',
+        createdAt: new Date('2026-06-01T09:00:00Z'),
+      },
+    ]);
   });
 
   it('GIVEN a non-member authenticated user WHEN listing orders SHOULD filter by their email', async () => {

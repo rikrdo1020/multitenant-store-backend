@@ -8,7 +8,7 @@ import { OrderRepository } from './order.repository';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { TrackOrderDto } from './dto/track-order.dto';
-import { UserRole } from '@prisma/client';
+import { OrderStatus, UserRole } from '@prisma/client';
 import { serialize, serializeList } from '../../common/utils/serializer';
 import { nanoid } from 'nanoid';
 import { OrderIntegrityService } from './order-integrity.service';
@@ -49,6 +49,26 @@ export class OrderService {
     ]);
 
     return this.serializeOrderList(items, { page, pageSize, total });
+  }
+
+  async findRecent(tenantId: string, limit = 10) {
+    const orders = await this.repo.findRecent(tenantId, Math.min(Math.max(limit, 1), 50));
+
+    return orders.map((order) => ({
+      documentId: order.id,
+      orderId: order.orderId,
+      orderNumber: order.orderId,
+      customer: {
+        name: order.customer?.name ?? this.getCustomerSnapshotName(order.customerData),
+        email: order.customer?.email ?? this.getCustomerSnapshotEmail(order.customerData),
+      },
+      total: Number(order.total ?? 0),
+      status: order.orderStatus,
+      orderStatus: order.orderStatus,
+      paymentStatus: this.getPaymentStatus(order.orderStatus),
+      paymentMethod: order.paymentMethod,
+      createdAt: order.createdAt,
+    }));
   }
 
   async findAllForUser(
@@ -295,6 +315,44 @@ export class OrderService {
 
   private normalizeEmail(email: string): string {
     return email.trim().toLowerCase();
+  }
+
+  private getPaymentStatus(status: OrderStatus) {
+    const paidStatuses: readonly OrderStatus[] = [
+      OrderStatus.paid,
+      OrderStatus.processing,
+      OrderStatus.ready,
+      OrderStatus.shipped,
+      OrderStatus.delivered,
+    ];
+    const failedStatuses: readonly OrderStatus[] = [
+      OrderStatus.cancelled,
+      OrderStatus.failed,
+      OrderStatus.rejected,
+      OrderStatus.expired,
+    ];
+
+    if (paidStatuses.includes(status)) {
+      return 'paid';
+    }
+
+    if (failedStatuses.includes(status)) {
+      return 'failed';
+    }
+
+    return 'pending';
+  }
+
+  private getCustomerSnapshotName(customerData: unknown) {
+    if (!customerData || typeof customerData !== 'object') return null;
+    const snapshot = customerData as Record<string, unknown>;
+    return typeof snapshot.name === 'string' ? snapshot.name : null;
+  }
+
+  private getCustomerSnapshotEmail(customerData: unknown) {
+    if (!customerData || typeof customerData !== 'object') return null;
+    const snapshot = customerData as Record<string, unknown>;
+    return typeof snapshot.email === 'string' ? snapshot.email : null;
   }
 
   private serializeOrder(

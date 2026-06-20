@@ -28,6 +28,24 @@ export class OrderRepository {
     });
   }
 
+  findRecent(tenantId: string, limit: number) {
+    return this.prisma.order.findMany({
+      where: { tenantId },
+      select: {
+        id: true,
+        orderId: true,
+        total: true,
+        orderStatus: true,
+        paymentMethod: true,
+        customerData: true,
+        customer: { select: { name: true, email: true } },
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+  }
+
   count(filter: OrderFilter): Promise<number> {
     return this.prisma.order.count({ where: this.buildWhere(filter) });
   }

@@ -8,6 +8,9 @@ const mockPrisma = {
     aggregate: vi.fn(),
     count: vi.fn(),
   },
+  product: {
+    findMany: vi.fn(),
+  },
 };
 
 describe('AnalyticsService', () => {
@@ -115,6 +118,75 @@ describe('AnalyticsService', () => {
       expect(result.total).toBe(0);
       expect(result.returning).toBe(0);
       expect(result.newCustomers).toBe(0);
+    });
+  });
+
+  describe('getLowStock', () => {
+    it('GIVEN products under threshold WHEN loading low stock SHOULD sort by available stock', async () => {
+      mockPrisma.product.findMany.mockResolvedValue([
+        {
+          id: 'p1',
+          name: 'B Product',
+          slug: 'b-product',
+          images: ['https://img.test/b.png'],
+          stock: 5,
+          reservedStock: 4,
+        },
+        {
+          id: 'p2',
+          name: 'A Product',
+          slug: 'a-product',
+          images: [],
+          stock: 0,
+          reservedStock: 0,
+        },
+        {
+          id: 'p3',
+          name: 'Healthy',
+          slug: 'healthy',
+          images: [],
+          stock: 20,
+          reservedStock: 1,
+        },
+      ]);
+
+      const result = await service.getLowStock(tenantId, 5);
+
+      expect(mockPrisma.product.findMany).toHaveBeenCalledWith({
+        where: {
+          tenantId,
+          productStatus: { not: 'archived' },
+        },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          images: true,
+          stock: true,
+          reservedStock: true,
+        },
+      });
+      expect(result.map((product) => product.documentId)).toEqual(['p2', 'p1']);
+      expect(result[0].stockStatus).toBe('out_of_stock');
+      expect(result[1].availableStock).toBe(1);
+      expect(result[1].image).toBe('https://img.test/b.png');
+    });
+
+    it('GIVEN no products under threshold WHEN loading low stock SHOULD return empty array', async () => {
+      mockPrisma.product.findMany.mockResolvedValue([
+        {
+          id: 'p1',
+          name: 'Healthy',
+          slug: 'healthy',
+          images: [],
+          stock: 20,
+          reservedStock: 0,
+        },
+      ]);
+
+      const result = await service.getLowStock(tenantId, 5);
+
+      expect(result).toEqual([]);
     });
   });
 });
