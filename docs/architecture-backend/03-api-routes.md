@@ -41,7 +41,9 @@ Customer auth is optional for browsing. Required for order history.
 | GET | `/shipping-methods` | - | Available shipping methods |
 | POST | `/customers` | - | Create customer (guest checkout) |
 | POST | `/orders` | - | Create order + init payment |
-| GET | `/orders/track/:orderId?token={viewToken}` | - | Public guest order tracking with view token |
+| GET | `/orders/track/:orderId?token={viewToken}` | - | Public guest order tracking with order ID + view token |
+| GET | `/orders/track/:viewToken` | - | Public guest order tracking with view token only |
+| POST | `/orders/track` | - | Public guest order tracking with `{ email, orderId }` |
 | GET | `/orders/:orderId/status` | - | Poll order payment status |
 | POST | `/payments/yappy/create` | - | Create Yappy payment for `orderId + viewToken` |
 | POST | `/webhooks/:provider` | - | Payment provider webhooks |
@@ -79,7 +81,7 @@ Customer auth is optional for browsing. Required for order history.
 | DELETE | `/admin/product-types/:id` | admin | Delete product type |
 | GET | `/admin/orders` | admin | Order list |
 | GET | `/admin/orders/:id` | admin | Order detail |
-| PUT | `/admin/orders/:id/status` | admin | Update order status |
+| PUT | `/admin/orders/:id/status` | admin | Update order status, tracking fields, and admin note |
 | PUT | `/admin/orders/:id/dispatch` | admin | Toggle dispatched |
 | GET | `/admin/shipping-methods` | admin | Shipping methods |
 | POST | `/admin/shipping-methods` | admin | Create shipping method |

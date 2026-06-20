@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { ProductStatus } from '@prisma/client';
 import { OrderItemDto } from './dto/create-order.dto';
 import { TrustedOrderItem } from './order-integrity.types';
@@ -28,11 +33,16 @@ export class OrderItemIntegrityService {
     const requestedQuantityByProduct =
       this.getRequestedQuantityByProduct(items);
 
+    await this.assertMissingProductsBelongToTenant(
+      productIds.filter((id) => !productsById.has(id)),
+      tenantId,
+    );
+
     return items.map((item) => {
       const product = productsById.get(item.productId);
       if (!product) {
         this.throwOrderBadRequest(
-          'ORDER_PRODUCT_NOT_FOUND',
+          'PRODUCT_UNAVAILABLE',
           'Product not found for this tenant',
         );
       }
@@ -74,16 +84,43 @@ export class OrderItemIntegrityService {
   ) {
     if (product.productStatus !== ProductStatus.published) {
       this.throwOrderBadRequest(
-        'ORDER_PRODUCT_UNAVAILABLE',
+        'PRODUCT_UNAVAILABLE',
         'Product is not available for purchase',
       );
     }
 
-    if (requestedQuantity > product.stock) {
-      this.throwOrderBadRequest(
-        'ORDER_INSUFFICIENT_STOCK',
-        'Requested quantity exceeds available stock',
-      );
+    const availableStock = Math.max(0, product.stock - product.reservedStock);
+    if (requestedQuantity > availableStock) {
+      throw new UnprocessableEntityException({
+        code: 'INSUFFICIENT_STOCK',
+        message: 'Requested quantity exceeds available stock',
+        details: [
+          {
+            productId: product.id,
+            requestedQuantity,
+            availableStock,
+          },
+        ],
+      });
+    }
+  }
+
+  private async assertMissingProductsBelongToTenant(
+    missingProductIds: string[],
+    tenantId: string,
+  ): Promise<void> {
+    if (!missingProductIds.length) return;
+
+    const existing = await this.repo.findProductTenantIdsByIds(missingProductIds);
+    const belongsToAnotherTenant = existing.some(
+      (product) => product.tenantId !== tenantId,
+    );
+
+    if (belongsToAnotherTenant) {
+      throw new ForbiddenException({
+        code: 'TENANT_RESOURCE_MISMATCH',
+        message: 'Product does not belong to the current tenant',
+      });
     }
   }
 

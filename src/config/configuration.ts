@@ -45,6 +45,10 @@ const envSchema = z.object({
   RESEND_API_KEY: z.string().min(1),
   RESEND_FROM_EMAIL: z.string().email(),
   RESEND_FROM_NAME: z.string().min(1),
+  MOCK_EMAIL: z
+    .enum(['true', 'false'])
+    .optional()
+    .default('false'),
   EMAIL_ALLOWED_DEEP_LINK_SCHEMES: z.string().default(DEFAULT_DEEP_LINK_SCHEMES),
   EMAIL_RECIPIENT_WINDOW_MINUTES: z.coerce.number().int().positive().default(15),
   EMAIL_RECIPIENT_WINDOW_LIMIT: z.coerce.number().int().positive().default(3),
@@ -67,6 +71,7 @@ const envSchema = z.object({
     .default('http://localhost:5173'),
   PASSWORD_RESET_URL: z.string().min(1).default('multitenant://reset-password'),
   TEAM_INVITE_URL: z.string().min(1).default('multitenant://invite'),
+  ORDER_TRACKING_URL: z.string().min(1).default('multitenant://track'),
 
   YAPPY_MOCK: z.string().optional(),
   YAPPY_MERCHANT_ID: z.string().optional(),
@@ -75,7 +80,7 @@ const envSchema = z.object({
   YAPPY_API_URL: z.string().optional(),
   YAPPY_SITE_URL: z.string().optional(),
 }).superRefine((env, ctx) => {
-  for (const key of ['PASSWORD_RESET_URL', 'TEAM_INVITE_URL'] as const) {
+  for (const key of ['PASSWORD_RESET_URL', 'TEAM_INVITE_URL', 'ORDER_TRACKING_URL'] as const) {
     if (!validateResetOrInviteBaseUrl(
       env[key],
       env.NODE_ENV,

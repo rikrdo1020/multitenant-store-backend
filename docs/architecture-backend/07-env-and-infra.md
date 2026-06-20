@@ -41,6 +41,8 @@ CLOUDINARY_API_SECRET=
 RESEND_API_KEY=
 RESEND_FROM_EMAIL=                    # e.g. noreply@multitenant.app
 RESEND_FROM_NAME=                     # e.g. MultiTenant Store
+MOCK_EMAIL=false                      # true = log email payloads without calling Resend
+ORDER_TRACKING_URL=multitenant://track # Base link for order tracking emails
 EMAIL_ALLOWED_DEEP_LINK_SCHEMES=multitenant
 EMAIL_RECIPIENT_WINDOW_MINUTES=15
 EMAIL_RECIPIENT_WINDOW_LIMIT=3

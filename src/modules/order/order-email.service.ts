@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { EmailAction, Order, OrderStatus, UserRole } from '@prisma/client';
 import { ResendService, SendEmailPolicy } from '../../lib/resend/resend.service';
 import { normalizeEmail } from '../../common/utils/privacy';
@@ -18,14 +19,22 @@ export class OrderEmailService {
   constructor(
     private readonly repo: OrderRepository,
     private readonly resend: ResendService,
+    private readonly config: ConfigService,
   ) {}
 
-  async sendOrderCreated(order: Order): Promise<void> {
+  async sendOrderCreated(order: Order, viewToken?: string): Promise<void> {
     const context = await this.repo.findTenantEmailContext(order.tenantId);
     if (!context) return;
 
     const sender = this.resolveSender(context.settings);
-    const summary = this.buildSummary(order, context.name, context.settings?.currency);
+    const summary = this.buildSummary(
+      order,
+      context.name,
+      context.settings?.currency,
+      undefined,
+      viewToken,
+      context.slug,
+    );
     const customerEmail = this.getCustomerEmail(order.customerData);
 
     if (customerEmail) {
@@ -75,6 +84,8 @@ export class OrderEmailService {
       context.name,
       context.settings?.currency,
       orderStatusLabel(order.orderStatus),
+      undefined,
+      context.slug,
     );
 
     await this.sendSafely('customer order-status', order.orderId, () => {
@@ -128,6 +139,8 @@ export class OrderEmailService {
     tenantName: string,
     currency = 'USD',
     status?: string,
+    viewToken?: string,
+    tenantSlug?: string,
   ): OrderEmailSummary {
     return {
       orderId: order.orderId,
@@ -136,6 +149,11 @@ export class OrderEmailService {
       customerName: this.getCustomerName(order.customerData),
       currency,
       status,
+      trackingUrl: this.buildTrackingUrl(order.orderId, tenantSlug, viewToken),
+      trackingNumber: order.trackingNumber ?? undefined,
+      trackingCarrier: order.trackingCarrier ?? undefined,
+      items: this.getItems(order.items),
+      pricing: this.getPricing(order),
     };
   }
 
@@ -184,6 +202,74 @@ export class OrderEmailService {
 
     const value = (source as Record<string, unknown>)[field];
     return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+  }
+
+  private getItems(items: unknown): OrderEmailSummary['items'] {
+    if (!Array.isArray(items)) return [];
+
+    return items.flatMap((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
+
+      const snapshot = item as Record<string, unknown>;
+      const name = snapshot.name;
+      const quantity = Number(snapshot.quantity);
+      const unitPrice = Number(snapshot.unitPrice);
+
+      if (
+        typeof name !== 'string' ||
+        !Number.isFinite(quantity) ||
+        !Number.isFinite(unitPrice)
+      ) {
+        return [];
+      }
+
+      return [{ name, quantity, unitPrice }];
+    });
+  }
+
+  private getPricing(order: Order): OrderEmailSummary['pricing'] {
+    const breakdown = order.pricingBreakdown;
+    if (breakdown && typeof breakdown === 'object' && !Array.isArray(breakdown)) {
+      const snapshot = breakdown as Record<string, unknown>;
+      return {
+        subtotal: this.toMoney(snapshot.subtotal),
+        discount: this.toMoney(snapshot.discount),
+        shippingCost: this.toMoney(snapshot.shippingCost),
+        tax: this.toMoney(snapshot.tax),
+        total: this.toMoney(snapshot.total),
+      };
+    }
+
+    return {
+      subtotal: Number(order.total),
+      discount: 0,
+      shippingCost: Number(order.shippingCost),
+      tax: 0,
+      total: Number(order.total),
+    };
+  }
+
+  private buildTrackingUrl(
+    orderId: string,
+    tenantSlug?: string,
+    viewToken?: string,
+  ): string {
+    const trackingUrl = new URL(
+      this.config.get<string>('ORDER_TRACKING_URL') ?? 'multitenant://track',
+    );
+    if (tenantSlug) {
+      trackingUrl.searchParams.set('tenantSlug', tenantSlug);
+    }
+    trackingUrl.searchParams.set('orderId', orderId);
+    if (viewToken) {
+      trackingUrl.searchParams.set('token', viewToken);
+    }
+    return trackingUrl.toString();
+  }
+
+  private toMoney(value: unknown): number {
+    const amount = Number(value);
+    return Number.isFinite(amount) ? amount : 0;
   }
 
   private resolveSender(settings?: {

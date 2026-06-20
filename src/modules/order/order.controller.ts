@@ -13,6 +13,7 @@ import {
 import { OrderService } from './order.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
+import { TrackOrderDto } from './dto/track-order.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles, Public } from '../../common/decorators/roles.decorator';
@@ -47,19 +48,29 @@ export class OrderController {
     return this.orderService.create(tenant.id, dto);
   }
 
-  // Storefront: track own order by public orderId + view token.
+  // Storefront: track own order by public view token, or legacy orderId + query token.
   @Public()
-  @Get('track/:orderId')
+  @Get('track/:value')
   track(
-    @Param('orderId') orderId: string,
+    @Param('value') value: string,
     @CurrentTenant() tenant: Tenant,
     @Query() query: TrackOrderQuery,
   ) {
-    return this.orderService.findByOrderIdForTracking(
-      orderId,
+    return this.orderService.findPublicTracking(
+      value,
       tenant.id,
       query.token,
     );
+  }
+
+  @Public()
+  @Post('track')
+  @HttpCode(HttpStatus.OK)
+  trackByEmail(
+    @CurrentTenant() tenant: Tenant,
+    @Body() dto: TrackOrderDto,
+  ) {
+    return this.orderService.findPublicTrackingByEmail(tenant.id, dto);
   }
 
   // Storefront account + admin order list. Service applies tenant membership/customer-email scoping.

@@ -17,7 +17,7 @@ export class OrderShippingIntegrityService {
   ): Promise<ResolvedShipping> {
     if (!dto.shippingMethodId) {
       this.throwOrderBadRequest(
-        'ORDER_SHIPPING_METHOD_INVALID',
+        'INVALID_SHIPPING_METHOD',
         'Shipping method is required',
       );
     }
@@ -28,7 +28,7 @@ export class OrderShippingIntegrityService {
     );
     if (!method) {
       this.throwOrderBadRequest(
-        'ORDER_SHIPPING_METHOD_INVALID',
+        'INVALID_SHIPPING_METHOD',
         'Shipping method is not available',
       );
     }
@@ -77,7 +77,7 @@ export class OrderShippingIntegrityService {
   ): OrderShippingLocationForCheckout | undefined {
     if (!shippingLocationId && method.logistics.length > 0) {
       this.throwOrderBadRequest(
-        'ORDER_SHIPPING_LOCATION_INVALID',
+        'INVALID_SHIPPING_LOCATION',
         'Shipping location is required',
       );
     }
@@ -92,7 +92,7 @@ export class OrderShippingIntegrityService {
 
     if (!location) {
       this.throwOrderBadRequest(
-        'ORDER_SHIPPING_LOCATION_INVALID',
+        'INVALID_SHIPPING_LOCATION',
         'Shipping location is not available',
       );
     }

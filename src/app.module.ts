@@ -1,5 +1,6 @@
 import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 
 import configuration, { validateEnv } from './config/configuration';
 import { PrismaModule } from './prisma/prisma.module';
@@ -37,6 +38,7 @@ import { NotificationModule } from './modules/notification/notification.module';
       load: [configuration],
       validate: validateEnv,
     }),
+    ScheduleModule.forRoot(),
     PrismaModule,
     LoggerModule,
     CloudinaryModule,

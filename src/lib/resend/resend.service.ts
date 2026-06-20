@@ -54,6 +54,14 @@ export class ResendService {
       ? `${options.fromName ?? this.defaultFromName} <${options.from}>`
       : this.defaultFrom;
 
+    if (this.config.get<string>('MOCK_EMAIL') === 'true') {
+      await this.emailSecurity.markSent(reservation?.id);
+      this.logger.log(
+        `[MOCK_EMAIL] Email to ${maskEmailList(options.to)}: "${options.subject}"`,
+      );
+      return;
+    }
+
     try {
       const { error } = await this.client.emails.send({
         from,

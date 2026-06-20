@@ -11,6 +11,7 @@ import {
 
 const ORDER_INCLUDE = {
   customer: { select: { id: true, name: true, email: true, phone: true } },
+  statusHistory: { orderBy: { createdAt: 'asc' as const } },
 } satisfies Prisma.OrderInclude;
 
 @Injectable()
@@ -60,6 +61,27 @@ export class OrderRepository {
     });
   }
 
+  findByViewTokenHash(tenantId: string, viewTokenHash: string) {
+    return this.prisma.order.findFirst({
+      where: { tenantId, viewTokenHash },
+      include: ORDER_INCLUDE,
+    });
+  }
+
+  findByOrderIdAndCustomerEmail(
+    orderId: string,
+    tenantId: string,
+    customerEmail: string,
+  ) {
+    return this.prisma.order.findFirst({
+      where: {
+        ...this.buildWhere({ tenantId, customerEmail }),
+        orderId,
+      },
+      include: ORDER_INCLUDE,
+    });
+  }
+
   create(data: Prisma.OrderCreateInput): Promise<Order> {
     return this.prisma.order.create({ data });
   }
@@ -80,14 +102,23 @@ export class OrderRepository {
       where: { id: { in: ids }, tenantId },
       select: {
         id: true,
+        tenantId: true,
         name: true,
         price: true,
         discountPrice: true,
         stock: true,
+        reservedStock: true,
         productStatus: true,
         type: true,
         images: true,
       },
+    });
+  }
+
+  findProductTenantIdsByIds(ids: string[]) {
+    return this.prisma.product.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, tenantId: true },
     });
   }
 
@@ -125,6 +156,13 @@ export class OrderRepository {
         isActive: true,
         rules: true,
       },
+    });
+  }
+
+  findTenantPricingSettings(tenantId: string) {
+    return this.prisma.tenantSetting.findUnique({
+      where: { tenantId },
+      select: { taxRate: true },
     });
   }
 

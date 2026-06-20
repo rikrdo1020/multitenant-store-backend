@@ -21,8 +21,10 @@ describe('OrderService order integrity', () => {
     upsertCustomerFromOrder: vi.fn(),
     hasTenantMembership: vi.fn(),
     findProductsByIds: vi.fn(),
+    findProductTenantIdsByIds: vi.fn(),
     findActiveShippingMethodById: vi.fn(),
     findActiveCombos: vi.fn(),
+    findTenantPricingSettings: vi.fn(),
   };
   const stock = {
     createOrderWithStockReservation: vi.fn(),
@@ -50,6 +52,8 @@ describe('OrderService order integrity', () => {
     repo.findProductsByIds.mockResolvedValue([publishedProduct()]);
     repo.findActiveShippingMethodById.mockResolvedValue(activeShippingMethod());
     repo.findActiveCombos.mockResolvedValue([]);
+    repo.findProductTenantIdsByIds.mockResolvedValue([]);
+    repo.findTenantPricingSettings.mockResolvedValue({ taxRate: 0 });
     emails.sendOrderCreated.mockResolvedValue(undefined);
     stock.createOrderWithStockReservation.mockImplementation(
       async (_tenantId, data) => ({
@@ -83,6 +87,13 @@ describe('OrderService order integrity', () => {
       expect.objectContaining({
         total: 207.48,
         shippingCost: 7.5,
+        pricingBreakdown: {
+          subtotal: 199.98,
+          discount: 0,
+          shippingCost: 7.5,
+          tax: 0,
+          total: 207.48,
+        },
         items: [
           expect.objectContaining({
             productId: 'prod-1',
@@ -99,11 +110,14 @@ describe('OrderService order integrity', () => {
 
   it('GIVEN a product outside the tenant WHEN creating an order SHOULD reject the order', async () => {
     repo.findProductsByIds.mockResolvedValue([]);
+    repo.findProductTenantIdsByIds.mockResolvedValue([
+      { id: 'prod-1', tenantId: 'tenant-2' },
+    ]);
 
     await expect(
       service.create('tenant-1', createOrderDto()),
     ).rejects.toMatchObject({
-      response: expect.objectContaining({ code: 'ORDER_PRODUCT_NOT_FOUND' }),
+      response: expect.objectContaining({ code: 'TENANT_RESOURCE_MISMATCH' }),
     });
 
     expect(stock.createOrderWithStockReservation).not.toHaveBeenCalled();
@@ -117,7 +131,7 @@ describe('OrderService order integrity', () => {
     await expect(
       service.create('tenant-1', createOrderDto()),
     ).rejects.toMatchObject({
-      response: expect.objectContaining({ code: 'ORDER_PRODUCT_UNAVAILABLE' }),
+      response: expect.objectContaining({ code: 'PRODUCT_UNAVAILABLE' }),
     });
 
     expect(stock.createOrderWithStockReservation).not.toHaveBeenCalled();
@@ -141,7 +155,8 @@ describe('OrderService order integrity', () => {
         }),
       ),
     ).rejects.toMatchObject({
-      response: expect.objectContaining({ code: 'ORDER_INSUFFICIENT_STOCK' }),
+      response: expect.objectContaining({ code: 'INSUFFICIENT_STOCK' }),
+      status: 422,
     });
 
     expect(stock.createOrderWithStockReservation).not.toHaveBeenCalled();
@@ -173,7 +188,8 @@ describe('OrderService order integrity', () => {
         }),
       ),
     ).rejects.toMatchObject({
-      response: expect.objectContaining({ code: 'ORDER_INSUFFICIENT_STOCK' }),
+      response: expect.objectContaining({ code: 'INSUFFICIENT_STOCK' }),
+      status: 422,
     });
 
     expect(stock.createOrderWithStockReservation).not.toHaveBeenCalled();
@@ -186,7 +202,7 @@ describe('OrderService order integrity', () => {
       service.create('tenant-1', createOrderDto()),
     ).rejects.toMatchObject({
       response: expect.objectContaining({
-        code: 'ORDER_SHIPPING_METHOD_INVALID',
+        code: 'INVALID_SHIPPING_METHOD',
       }),
     });
 
@@ -201,7 +217,7 @@ describe('OrderService order integrity', () => {
       ),
     ).rejects.toMatchObject({
       response: expect.objectContaining({
-        code: 'ORDER_SHIPPING_LOCATION_INVALID',
+        code: 'INVALID_SHIPPING_LOCATION',
       }),
     });
 
@@ -262,6 +278,13 @@ describe('OrderService order integrity', () => {
       expect.objectContaining({
         total: 157.5,
         shippingCost: 7.5,
+        pricingBreakdown: {
+          subtotal: 199.98,
+          discount: 49.98,
+          shippingCost: 7.5,
+          tax: 0,
+          total: 157.5,
+        },
       }),
       expect.any(Array),
     );
@@ -313,10 +336,12 @@ function createOrderDto(
 function publishedProduct(overrides: Record<string, unknown> = {}) {
   return {
     id: 'prod-1',
+    tenantId: 'tenant-1',
     name: 'Wireless Headphones Pro',
     price: 129.99,
     discountPrice: 99.99,
     stock: 10,
+    reservedStock: 0,
     productStatus: ProductStatus.published,
     type: 'audio',
     images: ['https://cdn.test/headphones.jpg'],

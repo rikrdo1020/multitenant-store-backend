@@ -19,6 +19,15 @@ export interface TrustedOrderPayload {
   shippingCost: number;
   shippingMethodId: string;
   shippingLocationId?: string;
+  pricingBreakdown: OrderPricingBreakdown;
+  total: number;
+}
+
+export interface OrderPricingBreakdown {
+  subtotal: number;
+  discount: number;
+  shippingCost: number;
+  tax: number;
   total: number;
 }
 

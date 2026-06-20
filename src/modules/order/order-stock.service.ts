@@ -2,8 +2,9 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
-import { Order, OrderStatus, Prisma, ProductStatus } from '@prisma/client';
+import { Order, OrderStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 export interface StockReservationItem {
@@ -16,6 +17,11 @@ export interface OrderStatusTransitionData {
   transactionId?: string;
   confirmationNumber?: string;
   dispatched?: boolean;
+  trackingNumber?: string;
+  trackingCarrier?: string;
+  trackingUrl?: string;
+  adminNote?: string;
+  changedBy?: string;
 }
 
 interface TransitionOptions {
@@ -24,11 +30,15 @@ interface TransitionOptions {
 
 type TransactionClient = Prisma.TransactionClient;
 
-const STOCK_HELD_STATUSES = new Set<OrderStatus>([
-  OrderStatus.pending,
+const RESERVED_STATUSES = new Set<OrderStatus>([OrderStatus.pending]);
+const CONSUMED_STATUSES = new Set<OrderStatus>([
   OrderStatus.paid,
+  OrderStatus.processing,
+  OrderStatus.ready,
+  OrderStatus.shipped,
+  OrderStatus.delivered,
 ]);
-const STOCK_RELEASED_STATUSES = new Set<OrderStatus>([
+const RELEASED_STATUSES = new Set<OrderStatus>([
   OrderStatus.cancelled,
   OrderStatus.failed,
   OrderStatus.rejected,
@@ -46,7 +56,16 @@ export class OrderStockService {
   ): Promise<Order> {
     return this.prisma.$transaction(async (tx) => {
       await this.reserveStock(tx, tenantId, items);
-      return tx.order.create({ data });
+      const order = await tx.order.create({ data });
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId: order.id,
+          status: order.orderStatus,
+          note: 'Order created',
+          changedBy: 'system',
+        },
+      });
+      return order;
     });
   }
 
@@ -82,6 +101,28 @@ export class OrderStockService {
     );
   }
 
+  async expirePendingReservations(minutes = 15): Promise<number> {
+    const expiresBefore = new Date(Date.now() - minutes * 60 * 1000);
+    const orders = await this.prisma.order.findMany({
+      where: {
+        orderStatus: OrderStatus.pending,
+        createdAt: { lt: expiresBefore },
+      },
+      select: { id: true, tenantId: true },
+      take: 100,
+    });
+
+    for (const order of orders) {
+      await this.transitionOrderStatusById(order.id, order.tenantId, {
+        orderStatus: OrderStatus.expired,
+        adminNote: 'Reservation expired automatically',
+        changedBy: 'system',
+      });
+    }
+
+    return orders.length;
+  }
+
   private async transitionOrderStatus(
     where: Prisma.OrderWhereInput,
     data: OrderStatusTransitionData,
@@ -100,19 +141,55 @@ export class OrderStockService {
           tenantId: true,
           orderStatus: true,
           items: true,
+          trackingNumber: true,
         },
       });
 
       if (!order) return null;
 
+      this.assertTrackingRequirements(order, data);
       await this.applyStockTransition(tx, order, data.orderStatus);
-      return tx.order.update({ where: { id: order.id }, data });
+
+      const { adminNote, changedBy, ...orderData } = data;
+      const updated = await tx.order.update({
+        where: { id: order.id },
+        data: orderData,
+      });
+
+      if (data.orderStatus && data.orderStatus !== order.orderStatus) {
+        await tx.orderStatusHistory.create({
+          data: {
+            orderId: order.id,
+            status: data.orderStatus,
+            note: adminNote,
+            changedBy,
+          },
+        });
+      }
+
+      return updated;
     });
+  }
+
+  private assertTrackingRequirements(
+    order: { trackingNumber: string | null },
+    data: OrderStatusTransitionData,
+  ): void {
+    if (data.orderStatus !== OrderStatus.shipped) return;
+
+    const trackingNumber = data.trackingNumber ?? order.trackingNumber;
+    if (!trackingNumber?.trim()) {
+      throw new BadRequestException({
+        code: 'ORDER_TRACKING_NUMBER_REQUIRED',
+        message: 'Tracking number is required when shipping an order',
+      });
+    }
   }
 
   private async applyStockTransition(
     tx: TransactionClient,
     order: {
+      id: string;
       tenantId: string;
       orderStatus: OrderStatus;
       items: Prisma.JsonValue;
@@ -121,21 +198,49 @@ export class OrderStockService {
   ): Promise<void> {
     if (!nextStatus || nextStatus === order.orderStatus) return;
 
+    const currentState = this.stockState(order.orderStatus);
+    const nextState = this.stockState(nextStatus);
+    if (currentState === nextState) return;
+
     const items = this.getStockItems(order.items);
-    if (
-      STOCK_HELD_STATUSES.has(order.orderStatus) &&
-      STOCK_RELEASED_STATUSES.has(nextStatus)
-    ) {
-      await this.restoreStock(tx, order.tenantId, items);
+
+    if (currentState === 'reserved' && nextState === 'consumed') {
+      await this.consumeReservedStock(tx, order.tenantId, items);
       return;
     }
 
-    if (
-      STOCK_RELEASED_STATUSES.has(order.orderStatus) &&
-      STOCK_HELD_STATUSES.has(nextStatus)
-    ) {
-      await this.reserveStock(tx, order.tenantId, items);
+    if (currentState === 'reserved' && nextState === 'released') {
+      await this.releaseReservedStock(tx, order.tenantId, items);
+      return;
     }
+
+    if (currentState === 'consumed' && nextState === 'released') {
+      await this.restoreConsumedStock(tx, order.tenantId, items);
+      return;
+    }
+
+    if (currentState === 'consumed' && nextState === 'reserved') {
+      await this.moveConsumedStockToReserved(tx, order.tenantId, items);
+      return;
+    }
+
+    if (currentState === 'released' && nextState === 'reserved') {
+      await this.reserveStock(tx, order.tenantId, items);
+      return;
+    }
+
+    if (currentState === 'released' && nextState === 'consumed') {
+      await this.consumeAvailableStock(tx, order.tenantId, items);
+    }
+  }
+
+  private stockState(
+    status: OrderStatus,
+  ): 'reserved' | 'consumed' | 'released' {
+    if (RESERVED_STATUSES.has(status)) return 'reserved';
+    if (CONSUMED_STATUSES.has(status)) return 'consumed';
+    if (RELEASED_STATUSES.has(status)) return 'released';
+    return 'released';
   }
 
   private async reserveStock(
@@ -144,26 +249,77 @@ export class OrderStockService {
     items: StockReservationItem[],
   ): Promise<void> {
     for (const item of this.aggregateStockItems(items)) {
-      const result = await tx.product.updateMany({
-        where: {
-          id: item.productId,
-          tenantId,
-          stock: { gte: item.quantity },
-          productStatus: ProductStatus.published,
-        },
-        data: { stock: { decrement: item.quantity } },
-      });
+      const count = await tx.$executeRaw`
+        UPDATE "Product"
+        SET "reservedStock" = "reservedStock" + ${item.quantity}
+        WHERE "id" = ${item.productId}
+          AND "tenantId" = ${tenantId}
+          AND "productStatus" = 'published'
+          AND ("stock" - "reservedStock") >= ${item.quantity}
+      `;
 
-      if (result.count !== 1) {
-        throw new BadRequestException({
-          code: 'ORDER_INSUFFICIENT_STOCK',
-          message: 'Requested quantity exceeds available stock',
-        });
-      }
+      this.assertStockMutation(count, item);
     }
   }
 
-  private async restoreStock(
+  private async consumeReservedStock(
+    tx: TransactionClient,
+    tenantId: string,
+    items: StockReservationItem[],
+  ): Promise<void> {
+    for (const item of this.aggregateStockItems(items)) {
+      const count = await tx.$executeRaw`
+        UPDATE "Product"
+        SET
+          "stock" = "stock" - ${item.quantity},
+          "reservedStock" = "reservedStock" - ${item.quantity}
+        WHERE "id" = ${item.productId}
+          AND "tenantId" = ${tenantId}
+          AND "reservedStock" >= ${item.quantity}
+          AND "stock" >= ${item.quantity}
+      `;
+
+      this.assertStockMutation(count, item);
+    }
+  }
+
+  private async consumeAvailableStock(
+    tx: TransactionClient,
+    tenantId: string,
+    items: StockReservationItem[],
+  ): Promise<void> {
+    for (const item of this.aggregateStockItems(items)) {
+      const count = await tx.$executeRaw`
+        UPDATE "Product"
+        SET "stock" = "stock" - ${item.quantity}
+        WHERE "id" = ${item.productId}
+          AND "tenantId" = ${tenantId}
+          AND "productStatus" = 'published'
+          AND ("stock" - "reservedStock") >= ${item.quantity}
+      `;
+
+      this.assertStockMutation(count, item);
+    }
+  }
+
+  private async releaseReservedStock(
+    tx: TransactionClient,
+    tenantId: string,
+    items: StockReservationItem[],
+  ): Promise<void> {
+    for (const item of this.aggregateStockItems(items)) {
+      await tx.product.updateMany({
+        where: {
+          id: item.productId,
+          tenantId,
+          reservedStock: { gte: item.quantity },
+        },
+        data: { reservedStock: { decrement: item.quantity } },
+      });
+    }
+  }
+
+  private async restoreConsumedStock(
     tx: TransactionClient,
     tenantId: string,
     items: StockReservationItem[],
@@ -174,6 +330,37 @@ export class OrderStockService {
         data: { stock: { increment: item.quantity } },
       });
     }
+  }
+
+  private async moveConsumedStockToReserved(
+    tx: TransactionClient,
+    tenantId: string,
+    items: StockReservationItem[],
+  ): Promise<void> {
+    for (const item of this.aggregateStockItems(items)) {
+      await tx.product.updateMany({
+        where: { id: item.productId, tenantId },
+        data: {
+          stock: { increment: item.quantity },
+          reservedStock: { increment: item.quantity },
+        },
+      });
+    }
+  }
+
+  private assertStockMutation(count: number, item: StockReservationItem): void {
+    if (count === 1) return;
+
+    throw new UnprocessableEntityException({
+      code: 'INSUFFICIENT_STOCK',
+      message: 'Requested quantity exceeds available stock',
+      details: [
+        {
+          productId: item.productId,
+          requestedQuantity: item.quantity,
+        },
+      ],
+    });
   }
 
   private getStockItems(items: Prisma.JsonValue): StockReservationItem[] {

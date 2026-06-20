@@ -42,10 +42,12 @@ export interface OrderCustomerSnapshot {
 
 export interface OrderProductForCheckout {
   id: string;
+  tenantId: string;
   name: string;
   price: Decimal;
   discountPrice: Decimal | null;
   stock: number;
+  reservedStock: number;
   productStatus: ProductStatus;
   type: string | null;
   images: string[];

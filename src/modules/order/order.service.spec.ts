@@ -20,14 +20,18 @@ describe('OrderService customer visibility', () => {
     findById: vi.fn(),
     findByIdForCustomerEmail: vi.fn(),
     findByOrderIdAndViewTokenHash: vi.fn(),
+    findByViewTokenHash: vi.fn(),
+    findByOrderIdAndCustomerEmail: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
     findCustomerById: vi.fn(),
     upsertCustomerFromOrder: vi.fn(),
     hasTenantMembership: vi.fn(),
     findProductsByIds: vi.fn(),
+    findProductTenantIdsByIds: vi.fn(),
     findActiveShippingMethodById: vi.fn(),
     findActiveCombos: vi.fn(),
+    findTenantPricingSettings: vi.fn(),
     findTenantMemberUserIds: vi.fn().mockResolvedValue([]),
   };
 
@@ -77,15 +81,19 @@ describe('OrderService customer visibility', () => {
     repo.count.mockResolvedValue(0);
     repo.hasTenantMembership.mockResolvedValue(null);
     repo.findActiveCombos.mockResolvedValue([]);
+    repo.findProductTenantIdsByIds.mockResolvedValue([]);
+    repo.findTenantPricingSettings.mockResolvedValue({ taxRate: 0 });
     emails.sendOrderCreated.mockResolvedValue(undefined);
     emails.sendOrderStatusNotification.mockResolvedValue(undefined);
     repo.findProductsByIds.mockResolvedValue([
       {
         id: 'prod-1',
+        tenantId: 'tenant-1',
         name: 'Product',
         price: 5,
         discountPrice: null,
         stock: 10,
+        reservedStock: 0,
         productStatus: ProductStatus.published,
         type: null,
         images: [],
@@ -223,6 +231,7 @@ describe('OrderService customer visibility', () => {
     expect(result.viewTokenHash).toBeUndefined();
     expect(emails.sendOrderCreated).toHaveBeenCalledWith(
       expect.objectContaining({ orderId: expect.any(String) }),
+      expect.any(String),
     );
   });
 
@@ -234,16 +243,17 @@ describe('OrderService customer visibility', () => {
       orderStatus: OrderStatus.pending,
       total: 10,
       shippingCost: 0,
-      customerData: { email: 'buyer@example.com' },
-      shippingData: {},
+      customerData: { email: 'buyer@example.com', phone: '+507 6000-0000' },
+      shippingData: { address: { address: 'Street 1', city: 'Panama' } },
       items: [],
+      statusHistory: [],
       paymentMethod: 'pending',
       tenantId: 'tenant-1',
       createdAt: new Date(),
       updatedAt: new Date(),
     });
 
-    const result = (await service.findByOrderIdForTracking(
+    const result = (await service.findPublicTracking(
       'ORD-1',
       'tenant-1',
       'public-token',
@@ -256,11 +266,46 @@ describe('OrderService customer visibility', () => {
     );
     expect(result.orderId).toBe('ORD-1');
     expect(result.viewTokenHash).toBeUndefined();
+    expect(result.customerData).toEqual({
+      email: 'b***@example.com',
+      phone: '+507 ***-****',
+    });
+  });
+
+  it('GIVEN view token only WHEN reading public order SHOULD use token hash lookup', async () => {
+    repo.findByViewTokenHash.mockResolvedValue({
+      id: 'order-1',
+      orderId: 'ORD-1',
+      viewTokenHash: 'internal-hash',
+      orderStatus: OrderStatus.pending,
+      total: 10,
+      shippingCost: 0,
+      customerData: { email: 'buyer@example.com' },
+      shippingData: {},
+      items: [],
+      statusHistory: [],
+      paymentMethod: 'pending',
+      tenantId: 'tenant-1',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const result = (await service.findPublicTracking(
+      'public-token',
+      'tenant-1',
+    )) as Record<string, unknown>;
+
+    expect(repo.findByViewTokenHash).toHaveBeenCalledWith(
+      'tenant-1',
+      hashToken('public-token'),
+    );
+    expect(result.orderId).toBe('ORD-1');
+    expect(result.viewTokenHash).toBeUndefined();
   });
 
   it('GIVEN missing tracking token WHEN reading public order SHOULD reject before querying', async () => {
     await expect(
-      service.findByOrderIdForTracking('ORD-1', 'tenant-1', ''),
+      service.findPublicTracking('', 'tenant-1'),
     ).rejects.toMatchObject({
       response: expect.objectContaining({
         code: 'ORDER_TRACKING_TOKEN_REQUIRED',
@@ -274,9 +319,44 @@ describe('OrderService customer visibility', () => {
     repo.findByOrderIdAndViewTokenHash.mockResolvedValue(null);
 
     await expect(
-      service.findByOrderIdForTracking('ORD-1', 'tenant-1', 'bad-token'),
+      service.findPublicTracking('ORD-1', 'tenant-1', 'bad-token'),
     ).rejects.toMatchObject({
       response: expect.objectContaining({ code: 'ORDER_NOT_FOUND' }),
+    });
+  });
+
+  it('GIVEN email and order id WHEN public tracking by email SHOULD return masked tracking data', async () => {
+    repo.findByOrderIdAndCustomerEmail.mockResolvedValue({
+      id: 'order-1',
+      orderId: 'ORD-1',
+      viewTokenHash: 'internal-hash',
+      orderStatus: OrderStatus.pending,
+      total: 10,
+      shippingCost: 0,
+      customerData: { email: 'buyer@example.com', name: 'Buyer' },
+      shippingData: { address: { address: 'Street 1', city: 'Panama' } },
+      items: [],
+      statusHistory: [{ status: OrderStatus.pending, createdAt: new Date() }],
+      paymentMethod: 'pending',
+      tenantId: 'tenant-1',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const result = (await service.findPublicTrackingByEmail('tenant-1', {
+      orderId: 'ORD-1',
+      email: 'Buyer@Example.com',
+    })) as Record<string, unknown>;
+
+    expect(repo.findByOrderIdAndCustomerEmail).toHaveBeenCalledWith(
+      'ORD-1',
+      'tenant-1',
+      'buyer@example.com',
+    );
+    expect(result.viewTokenHash).toBeUndefined();
+    expect(result.customerData).toEqual({
+      name: 'B***',
+      email: 'b***@example.com',
     });
   });
 

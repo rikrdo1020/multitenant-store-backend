@@ -62,6 +62,7 @@ Server starts at `http://localhost:3000`. All routes are prefixed with `/api/v1`
 | `RESEND_API_KEY` | Resend API key |
 | `RESEND_FROM_EMAIL` | Default verified sender email for transactional emails |
 | `RESEND_FROM_NAME` | Default sender display name for transactional emails |
+| `MOCK_EMAIL` | When `true`, email sends are logged and recorded without calling Resend |
 | `EMAIL_ALLOWED_DEEP_LINK_SCHEMES` | Comma-separated approved deep link schemes for auth emails |
 | `EMAIL_RECIPIENT_WINDOW_MINUTES` | Per-recipient email/rate-limit window in minutes |
 | `EMAIL_RECIPIENT_WINDOW_LIMIT` | Max attempts per recipient/action within the window |
@@ -73,6 +74,7 @@ Server starts at `http://localhost:3000`. All routes are prefixed with `/api/v1`
 | `FRONTEND_URL` | Frontend URL for CORS |
 | `PASSWORD_RESET_URL` | Native deep link base for password reset emails, e.g. `multitenant://reset-password` |
 | `TEAM_INVITE_URL` | Native deep link base for team invitation emails, e.g. `multitenant://invite` |
+| `ORDER_TRACKING_URL` | Native/web deep link base for public order tracking emails, e.g. `multitenant://track` |
 | `SEED_SUPERADMIN_EMAIL` | Superadmin email created by seed |
 | `SEED_SUPERADMIN_PASSWORD` | Superadmin password created by seed |
 

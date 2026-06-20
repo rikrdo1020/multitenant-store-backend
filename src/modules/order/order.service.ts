@@ -7,6 +7,7 @@ import {
 import { OrderRepository } from './order.repository';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
+import { TrackOrderDto } from './dto/track-order.dto';
 import { UserRole } from '@prisma/client';
 import { serialize, serializeList } from '../../common/utils/serializer';
 import { nanoid } from 'nanoid';
@@ -100,29 +101,59 @@ export class OrderService {
     return this.serializeOrder(order);
   }
 
-  async findByOrderIdForTracking(
-    orderId: string,
+  async findPublicTracking(
+    value: string,
     tenantId: string,
     viewToken?: string,
   ) {
-    if (!viewToken?.trim()) {
+    if (viewToken?.trim()) {
+      const order = await this.repo.findByOrderIdAndViewTokenHash(
+        value,
+        tenantId,
+        hashOrderViewToken(viewToken),
+      );
+      if (!order) {
+        throw new NotFoundException({
+          code: 'ORDER_NOT_FOUND',
+          message: 'Order not found',
+        });
+      }
+      return this.serializePublicTrackingOrder(order);
+    }
+
+    if (!value?.trim()) {
       throw new BadRequestException({
         code: 'ORDER_TRACKING_TOKEN_REQUIRED',
         message: 'Order tracking token is required',
       });
     }
 
-    const order = await this.repo.findByOrderIdAndViewTokenHash(
-      orderId,
+    const order = await this.repo.findByViewTokenHash(
       tenantId,
-      hashOrderViewToken(viewToken),
+      hashOrderViewToken(value),
     );
     if (!order)
       throw new NotFoundException({
         code: 'ORDER_NOT_FOUND',
         message: 'Order not found',
       });
-    return this.serializeOrder(order);
+    return this.serializePublicTrackingOrder(order);
+  }
+
+  async findPublicTrackingByEmail(tenantId: string, dto: TrackOrderDto) {
+    const order = await this.repo.findByOrderIdAndCustomerEmail(
+      dto.orderId,
+      tenantId,
+      this.normalizeEmail(dto.email),
+    );
+    if (!order) {
+      throw new NotFoundException({
+        code: 'ORDER_NOT_FOUND',
+        message: 'Order not found',
+      });
+    }
+
+    return this.serializePublicTrackingOrder(order);
   }
 
   async create(tenantId: string, dto: CreateOrderDto) {
@@ -154,6 +185,7 @@ export class OrderService {
         orderId,
         total: trustedOrder.total,
         shippingCost: trustedOrder.shippingCost,
+        pricingBreakdown: trustedOrder.pricingBreakdown as any,
         customerData: customerData as any,
         shippingData: trustedOrder.shippingData as any,
         items: trustedOrder.items as any,
@@ -174,7 +206,9 @@ export class OrderService {
       metadata: { orderId: order.id, orderRef: orderId },
     }).catch(() => undefined);
 
-    await this.emails.sendOrderCreated(order);
+    void this.emails
+      .sendOrderCreated(order, viewToken)
+      .catch(() => undefined);
     return this.serializeOrder(order, { viewToken });
   }
 
@@ -192,10 +226,15 @@ export class OrderService {
       });
     }
 
-    return this.updateStatus(id, tenantId, dto);
+    return this.updateStatus(id, tenantId, dto, user.sub);
   }
 
-  async updateStatus(id: string, tenantId: string, dto: UpdateOrderStatusDto) {
+  async updateStatus(
+    id: string,
+    tenantId: string,
+    dto: UpdateOrderStatusDto,
+    changedBy?: string,
+  ) {
     const updated = await this.stock.transitionOrderStatusById(id, tenantId, {
       ...(dto.orderStatus && { orderStatus: dto.orderStatus }),
       ...(dto.transactionId !== undefined && {
@@ -205,9 +244,20 @@ export class OrderService {
         confirmationNumber: dto.confirmationNumber,
       }),
       ...(dto.dispatched !== undefined && { dispatched: dto.dispatched }),
+      ...(dto.trackingNumber !== undefined && {
+        trackingNumber: dto.trackingNumber,
+      }),
+      ...(dto.trackingCarrier !== undefined && {
+        trackingCarrier: dto.trackingCarrier,
+      }),
+      ...(dto.trackingUrl !== undefined && { trackingUrl: dto.trackingUrl }),
+      ...(dto.adminNote !== undefined && { adminNote: dto.adminNote }),
+      ...(changedBy !== undefined && { changedBy }),
     });
 
-    await this.emails.sendOrderStatusNotification(updated);
+    void this.emails
+      .sendOrderStatusNotification(updated)
+      .catch(() => undefined);
     if (dto.orderStatus) {
       void this.notifyTenantMembers(tenantId, {
         title: 'Estado de orden actualizado',
@@ -267,6 +317,29 @@ export class OrderService {
     );
   }
 
+  private serializePublicTrackingOrder(order: unknown): unknown {
+    const safeOrder = this.omitSensitiveOrderFields(order);
+
+    return serialize({
+      id: safeOrder.id,
+      orderId: safeOrder.orderId,
+      orderStatus: safeOrder.orderStatus,
+      items: safeOrder.items,
+      customerData: this.maskCustomerData(safeOrder.customerData),
+      shippingData: this.maskShippingData(safeOrder.shippingData),
+      pricingBreakdown: safeOrder.pricingBreakdown,
+      shippingCost: safeOrder.shippingCost,
+      total: safeOrder.total,
+      paymentMethod: safeOrder.paymentMethod,
+      trackingNumber: safeOrder.trackingNumber,
+      trackingCarrier: safeOrder.trackingCarrier,
+      trackingUrl: safeOrder.trackingUrl,
+      statusHistory: this.getPublicStatusHistory(safeOrder.statusHistory),
+      createdAt: safeOrder.createdAt,
+      updatedAt: safeOrder.updatedAt,
+    });
+  }
+
   private omitSensitiveOrderFields(order: unknown): Record<string, unknown> {
     const { viewTokenHash: _viewTokenHash, ...safeOrder } = order as Record<
       string,
@@ -291,5 +364,99 @@ export class OrderService {
         ? { city: snapshot.city.trim() }
         : {}),
     };
+  }
+
+  private maskCustomerData(customerData: unknown): Record<string, unknown> {
+    if (!customerData || typeof customerData !== 'object') return {};
+
+    const snapshot = customerData as Record<string, unknown>;
+
+    return {
+      ...(typeof snapshot.name === 'string' && {
+        name: this.maskName(snapshot.name),
+      }),
+      ...(typeof snapshot.email === 'string' && {
+        email: this.maskEmail(snapshot.email),
+      }),
+      ...(typeof snapshot.phone === 'string' && {
+        phone: this.maskPhone(snapshot.phone),
+      }),
+    };
+  }
+
+  private getPublicStatusHistory(statusHistory: unknown): unknown[] {
+    if (!Array.isArray(statusHistory)) return [];
+
+    return statusHistory.flatMap((entry) => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+        return [];
+      }
+
+      const snapshot = entry as Record<string, unknown>;
+      return [
+        {
+          status: snapshot.status,
+          note: snapshot.note,
+          createdAt: snapshot.createdAt,
+        },
+      ];
+    });
+  }
+
+  private maskShippingData(shippingData: unknown): Record<string, unknown> {
+    if (!shippingData || typeof shippingData !== 'object') return {};
+
+    const snapshot = shippingData as Record<string, unknown>;
+    const address = snapshot.address;
+
+    return {
+      ...snapshot,
+      ...(address && typeof address === 'object' && !Array.isArray(address)
+        ? {
+            address: this.maskAddressSnapshot(
+              address as Record<string, unknown>,
+            ),
+          }
+        : {}),
+    };
+  }
+
+  private maskAddressSnapshot(address: Record<string, unknown>) {
+    return {
+      ...(typeof address.address === 'string' && {
+        address: this.maskAddress(address.address),
+      }),
+      ...(typeof address.city === 'string' && { city: address.city }),
+      ...(typeof address.department === 'string' && {
+        department: address.department,
+      }),
+    };
+  }
+
+  private maskName(name: string): string {
+    const trimmed = name.trim();
+    if (trimmed.length <= 1) return '*';
+    return `${trimmed[0]}***`;
+  }
+
+  private maskEmail(email: string): string {
+    const [local, domain] = email.split('@');
+    if (!local || !domain) return '***';
+    return `${local[0]}***@${domain}`;
+  }
+
+  private maskPhone(phone: string): string {
+    const trimmed = phone.trim();
+    if (trimmed.startsWith('+')) {
+      const [prefix] = trimmed.split(/\s+/);
+      return `${prefix} ***-****`;
+    }
+    return '***-****';
+  }
+
+  private maskAddress(address: string): string {
+    const trimmed = address.trim();
+    if (trimmed.length <= 6) return '***';
+    return `${trimmed.slice(0, 6)}***`;
   }
 }

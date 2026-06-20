@@ -8,6 +8,7 @@ import { OrderPricingService } from './order-pricing.service';
 import { OrderItemIntegrityService } from './order-item-integrity.service';
 import { OrderShippingIntegrityService } from './order-shipping-integrity.service';
 import { OrderEmailService } from './order-email.service';
+import { OrderReservationExpirationService } from './order-reservation-expiration.service';
 import { NotificationModule } from '../notification/notification.module';
 
 @Module({
@@ -20,6 +21,7 @@ import { NotificationModule } from '../notification/notification.module';
     OrderPricingService,
     OrderShippingIntegrityService,
     OrderStockService,
+    OrderReservationExpirationService,
     OrderEmailService,
     OrderRepository,
   ],

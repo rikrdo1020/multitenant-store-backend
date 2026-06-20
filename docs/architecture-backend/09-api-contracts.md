@@ -466,6 +466,26 @@ Same shape as categories.
 
 **Response (200):** Public order object. `viewTokenHash` is never returned.
 
+### GET `/orders/track/:viewToken`
+
+**Headers:** `x-tenant-id: {tenantSlug}`
+
+**Response (200):** Public order object. `viewTokenHash` is never returned.
+
+### POST `/orders/track`
+
+**Headers:** `x-tenant-id: {tenantSlug}`
+
+**Request:**
+```json
+{
+  "orderId": "ORD-2026-0001",
+  "email": "juan@example.com"
+}
+```
+
+**Response (200):** Public order object with masked customer and shipping data.
+
 ### POST `/payments/yappy/create`
 
 **Headers:** `x-tenant-id: {tenantSlug}`
@@ -488,14 +508,18 @@ Same shape as categories.
 
 **Response (200):** Authenticated customer/admin order object.
 
-### PATCH `/orders/:orderId/status`
+### PUT `/orders/:orderId/status`
 
 **Headers:** `Authorization: Bearer {token}` (admin only)
 
 **Request:**
 ```json
 {
-  "orderStatus": "dispatched"
+  "orderStatus": "shipped",
+  "trackingNumber": "TRK-123",
+  "trackingCarrier": "DHL",
+  "trackingUrl": "https://tracking.example/TRK-123",
+  "adminNote": "Despachado desde bodega"
 }
 ```
 
@@ -661,11 +685,15 @@ interface Product {
 interface Order {
   documentId: string;
   orderId: string;
-  orderStatus: 'pending' | 'paid' | 'failed' | 'cancelled' | 'dispatched';
+  orderStatus: 'pending' | 'paid' | 'processing' | 'ready' | 'shipped' | 'delivered' | 'failed' | 'cancelled' | 'rejected' | 'expired';
   items: CartItem[];
   customerData: CustomerFormData;
   shippingMethod: ShippingMethod;
   shippingAddress?: ShippingAddressData;
+  pricingBreakdown?: { subtotal: number; discount: number; shippingCost: number; tax: number; total: number };
+  trackingNumber?: string;
+  trackingCarrier?: string;
+  trackingUrl?: string;
   total: number;
   createdAt: string;
 }

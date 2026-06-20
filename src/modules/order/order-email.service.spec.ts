@@ -9,7 +9,14 @@ describe('OrderEmailService', () => {
   const resend = {
     sendEmail: vi.fn(),
   };
-  const service = new OrderEmailService(repo as any, resend as any);
+  const config = {
+    get: vi.fn().mockReturnValue('multitenant://track'),
+  };
+  const service = new OrderEmailService(
+    repo as any,
+    resend as any,
+    config as any,
+  );
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -40,7 +47,7 @@ describe('OrderEmailService', () => {
   it('GIVEN a new order WHEN sending created emails SHOULD notify customer and admins', async () => {
     const order = makeOrder({ orderStatus: OrderStatus.pending });
 
-    await service.sendOrderCreated(order);
+    await service.sendOrderCreated(order, 'view-token');
 
     expect(resend.sendEmail).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -48,6 +55,7 @@ describe('OrderEmailService', () => {
         subject: 'Orden recibida ORD-1',
         from: 'orders@example.com',
         fromName: 'Demo Orders',
+        html: expect.stringContaining('token=view-token'),
       }),
       expect.objectContaining({
         action: EmailAction.order_created_customer,
@@ -55,6 +63,12 @@ describe('OrderEmailService', () => {
       }),
     );
     expect(resend.sendEmail).toHaveBeenCalledTimes(3);
+    expect(resend.sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        html: expect.stringContaining('tenantSlug=demo-store'),
+      }),
+      expect.any(Object),
+    );
     expect(resend.sendEmail).toHaveBeenCalledWith(
       expect.objectContaining({ to: 'owner@example.com', subject: 'Nueva orden ORD-1' }),
       expect.objectContaining({ action: EmailAction.order_created_admin }),
@@ -75,6 +89,12 @@ describe('OrderEmailService', () => {
         html: expect.stringContaining('pagado'),
       }),
       expect.objectContaining({ action: EmailAction.payment_confirmed }),
+    );
+    expect(resend.sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        html: expect.stringContaining('tenantSlug=demo-store'),
+      }),
+      expect.any(Object),
     );
   });
 
@@ -98,11 +118,18 @@ function makeOrder(overrides: Partial<Record<string, unknown>> = {}) {
     orderId: 'ORD-1',
     tenantId: 'tenant-1',
     total: 25,
-    shippingCost: 0,
+    pricingBreakdown: {
+      subtotal: 20,
+      discount: 0,
+      shippingCost: 5,
+      tax: 0,
+      total: 25,
+    },
+    shippingCost: 5,
     orderStatus: OrderStatus.pending,
     customerData: { email: 'Buyer@Example.com', name: 'Buyer' },
     shippingData: {},
-    items: [],
+    items: [{ name: 'Product', quantity: 2, unitPrice: 10 }],
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
