@@ -27,4 +27,15 @@ export class UpdateTenantDto {
   @IsString()
   @Matches(/^#[0-9a-fA-F]{6}$/, { message: 'primaryColor must be a valid hex color' })
   primaryColor?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^6\d{3}-?\d{4}$/, { message: 'yappyPhone must be a valid Panamanian mobile number (6xxx-xxxx)' })
+  yappyPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(100)
+  yappyName?: string;
 }

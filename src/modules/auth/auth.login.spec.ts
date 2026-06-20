@@ -59,6 +59,7 @@ describe('AuthService login roles', () => {
       role: UserRole.superadmin,
       isActive: true,
       tokenVersion: 0,
+      onboardingCompleted: true,
       tenants: [],
     });
 
@@ -91,6 +92,7 @@ describe('AuthService login roles', () => {
       role: UserRole.manager,
       isActive: true,
       tokenVersion: 2,
+      onboardingCompleted: false,
       tenants: [{ role: UserRole.admin, tenantId: 'tenant-1' }],
     });
     prisma.tenant.findUnique.mockResolvedValue({
@@ -108,10 +110,12 @@ describe('AuthService login roles', () => {
     });
 
     expect(result.user.role).toBe(UserRole.admin);
+    expect(result.user.onboardingCompleted).toBe(false);
     expect(result.tenant).toMatchObject({
       documentId: 'tenant-1',
       slug: 'demo-store',
       name: 'Demo Store',
+      plan: undefined,
     });
     expect(jwt.sign).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -138,6 +142,7 @@ describe('AuthService login roles', () => {
       role: UserRole.superadmin,
       isActive: true,
       tokenVersion: 3,
+      onboardingCompleted: true,
       tenants: [],
     });
 

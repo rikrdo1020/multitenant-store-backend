@@ -43,6 +43,16 @@ export class TenantRepository {
     return this.prisma.tenant.create({ data });
   }
 
+  createWithOwner(data: Prisma.TenantCreateInput, ownerId: string): Promise<Tenant> {
+    return this.prisma.$transaction(async (tx) => {
+      const tenant = await tx.tenant.create({ data });
+      await tx.tenantMember.create({
+        data: { userId: ownerId, tenantId: tenant.id, role: 'admin' },
+      });
+      return tenant;
+    });
+  }
+
   update(id: string, data: Prisma.TenantUpdateInput): Promise<Tenant> {
     return this.prisma.tenant.update({ where: { id }, data });
   }

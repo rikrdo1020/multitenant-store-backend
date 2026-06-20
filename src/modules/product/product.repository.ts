@@ -47,11 +47,19 @@ export class ProductRepository {
     return this.prisma.product.count({ where: this.buildWhere(filter) });
   }
 
-  findBySlug(slug: string, tenantId: string) {
-    return this.prisma.product.findUnique({
-      where: { slug_tenantId: { slug, tenantId } },
+  findBySlug(slug: string, tenantId: string, onlyPublished = true) {
+    return this.prisma.product.findFirst({
+      where: {
+        slug,
+        tenantId,
+        ...(onlyPublished ? { productStatus: 'published' } : {}),
+      },
       include: PRODUCT_INCLUDE,
     });
+  }
+
+  findBySlugAdmin(slug: string, tenantId: string) {
+    return this.findBySlug(slug, tenantId, false);
   }
 
   findById(id: string, tenantId: string) {

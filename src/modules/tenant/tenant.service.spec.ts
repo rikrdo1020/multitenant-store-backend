@@ -19,6 +19,9 @@ const makeTenant = (overrides = {}) => ({
   provider: 'stripe',
   providerConfig: null,
   customDomain: null,
+  whatsappPhone: null,
+  yappyPhone: null,
+  yappyName: null,
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
   ...overrides,
@@ -32,6 +35,7 @@ const makeRepo = () => ({
   isSlugTaken: vi.fn(),
   count: vi.fn(),
   create: vi.fn(),
+  createWithOwner: vi.fn(),
   update: vi.fn(),
   updateStatus: vi.fn(),
 });
@@ -49,7 +53,7 @@ describe('TenantService', () => {
     it('GIVEN valid input SHOULD create tenant with plan = FREE by default', async () => {
       const created = makeTenant();
       repo.findBySlug.mockResolvedValue(null);
-      repo.create.mockResolvedValue(created);
+      repo.createWithOwner.mockResolvedValue(created);
 
       const result = await service.create({
         slug: 'my-store',
@@ -63,7 +67,7 @@ describe('TenantService', () => {
     it('GIVEN valid input SHOULD expose plan in serialized response', async () => {
       const created = makeTenant({ plan: 'FREE' });
       repo.findBySlug.mockResolvedValue(null);
-      repo.create.mockResolvedValue(created);
+      repo.createWithOwner.mockResolvedValue(created);
 
       const result = await service.create({ slug: 'my-store', name: 'My Store', ownerId: 'user_1' });
 
@@ -194,6 +198,33 @@ describe('TenantService', () => {
       const result = await service.updateProfile('tenant_1', 'user_1', { slug: 'new-slug' });
 
       expect(result).toMatchObject({ slug: 'new-slug' });
+    });
+
+    it('GIVEN yappyPhone and yappyName SHOULD persist both fields', async () => {
+      const updated = makeTenant({ yappyPhone: '6000-0000', yappyName: 'Tienda Panama' });
+      repo.findById.mockResolvedValue(makeTenant());
+      repo.update.mockResolvedValue(updated);
+
+      const result = await service.updateProfile('tenant_1', 'user_1', {
+        yappyPhone: '6000-0000',
+        yappyName: 'Tienda Panama',
+      });
+
+      expect(repo.update).toHaveBeenCalledWith('tenant_1', {
+        yappyPhone: '6000-0000',
+        yappyName: 'Tienda Panama',
+      });
+      expect(result).toMatchObject({ yappyPhone: '6000-0000', yappyName: 'Tienda Panama' });
+    });
+
+    it('GIVEN no yappy fields SHOULD return tenant with null yappy values', async () => {
+      const tenant = makeTenant();
+      repo.findById.mockResolvedValue(tenant);
+      repo.update.mockResolvedValue(tenant);
+
+      const result = await service.updateProfile('tenant_1', 'user_1', { name: 'My Store' });
+
+      expect(result).toMatchObject({ yappyPhone: null, yappyName: null });
     });
   });
 });
