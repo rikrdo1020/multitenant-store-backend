@@ -23,6 +23,7 @@ export class ProductService {
       categoryId: filter.categoryId,
       brandId: filter.brandId,
       tagId: filter.tagId,
+      featured: filter.featured,
       minPrice: filter.minPrice,
       maxPrice: filter.maxPrice,
       sort: filter.sort,

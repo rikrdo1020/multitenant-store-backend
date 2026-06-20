@@ -27,6 +27,10 @@ class TopProductsQuery extends AnalyticsQuery {
   @IsOptional() @IsInt() @Min(1) @Max(50) @Type(() => Number) limit?: number;
 }
 
+class LowStockQuery {
+  @IsOptional() @IsInt() @Min(0) @Max(1000) @Type(() => Number) threshold?: number;
+}
+
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.admin, UserRole.manager, UserRole.superadmin)
 @Controller('analytics')
@@ -55,6 +59,11 @@ export class AnalyticsController {
   customers(@CurrentTenant() tenant: Tenant, @Query() q: AnalyticsQuery) {
     const { from, to } = this.parseDates(q);
     return this.analyticsService.getCustomers(tenant.id, from, to);
+  }
+
+  @Get('low-stock')
+  lowStock(@CurrentTenant() tenant: Tenant, @Query() q: LowStockQuery) {
+    return this.analyticsService.getLowStock(tenant.id, q.threshold ?? 5);
   }
 
   private parseDates(q: AnalyticsQuery) {

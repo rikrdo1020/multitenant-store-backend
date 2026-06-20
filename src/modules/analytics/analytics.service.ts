@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { OrderStatus, Prisma } from '@prisma/client';
+import { OrderStatus, Prisma, ProductStatus } from '@prisma/client';
 
 export type GroupBy = 'day' | 'week' | 'month';
 
@@ -32,6 +32,18 @@ export interface CustomerMetrics {
   newCustomers: number;
   returning: number;
   avgTicket: number;
+}
+
+export interface LowStockProduct {
+  documentId: string;
+  productId: string;
+  name: string;
+  slug: string;
+  image: string | null;
+  stock: number;
+  reservedStock: number;
+  availableStock: number;
+  stockStatus: 'in_stock' | 'low_stock' | 'out_of_stock';
 }
 
 const COMPLETED_STATUSES = [OrderStatus.paid] as const;
@@ -166,6 +178,48 @@ export class AnalyticsService {
     };
   }
 
+  async getLowStock(
+    tenantId: string,
+    threshold = 5,
+  ): Promise<LowStockProduct[]> {
+    const products = await this.prisma.product.findMany({
+      where: {
+        tenantId,
+        productStatus: { not: ProductStatus.archived },
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        images: true,
+        stock: true,
+        reservedStock: true,
+      },
+    });
+
+    return products
+      .map((product) => {
+        const availableStock = Math.max(
+          0,
+          product.stock - product.reservedStock,
+        );
+
+        return {
+          documentId: product.id,
+          productId: product.id,
+          name: product.name,
+          slug: product.slug,
+          image: product.images[0] ?? null,
+          stock: product.stock,
+          reservedStock: product.reservedStock,
+          availableStock,
+          stockStatus: this.getStockStatus(availableStock),
+        };
+      })
+      .filter((product) => product.availableStock <= threshold)
+      .sort((a, b) => a.availableStock - b.availableStock || a.name.localeCompare(b.name));
+  }
+
   private async periodAggregates(tenantId: string, from: Date, to: Date) {
     const agg = await this.prisma.order.aggregate({
       where: {
@@ -183,5 +237,11 @@ export class AnalyticsService {
     const avgTicket = Math.round(Number(agg._avg.total ?? 0) * 100) / 100;
 
     return { revenue, orders, avgTicket };
+  }
+
+  private getStockStatus(availableStock: number): LowStockProduct['stockStatus'] {
+    if (availableStock <= 0) return 'out_of_stock';
+    if (availableStock <= 5) return 'low_stock';
+    return 'in_stock';
   }
 }

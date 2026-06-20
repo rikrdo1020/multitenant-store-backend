@@ -31,6 +31,7 @@ import { PaymentModule } from './modules/payment/payment.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { PlanFeaturesModule } from './modules/plan-features/plan-features.module';
+import { BannerModule } from './modules/banner/banner.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { PlanFeaturesModule } from './modules/plan-features/plan-features.module
     AnalyticsModule,
     NotificationModule,
     PlanFeaturesModule,
+    BannerModule,
   ],
 })
 export class AppModule implements NestModule {

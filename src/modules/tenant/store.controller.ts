@@ -8,15 +8,25 @@ import { serialize } from '../../common/utils/serializer';
 import { TenantService } from './tenant.service';
 import { CreateStoreDto } from './dto/create-store.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
+import { StoreHomeService } from './store-home.service';
 
 @Controller('store')
 export class StoreController {
-  constructor(private readonly tenantService: TenantService) {}
+  constructor(
+    private readonly tenantService: TenantService,
+    private readonly storeHomeService: StoreHomeService,
+  ) {}
 
   @Public()
   @Get('profile')
   profile(@CurrentTenant() tenant: Tenant) {
     return serialize(tenant);
+  }
+
+  @Public()
+  @Get('home')
+  home(@CurrentTenant() tenant: Tenant) {
+    return this.storeHomeService.getHome(tenant.id);
   }
 
   @Public()

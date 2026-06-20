@@ -20,7 +20,7 @@ import { Roles, Public } from '../../common/decorators/roles.decorator';
 import { CurrentTenant } from '../../common/decorators/tenant.decorator';
 import { CurrentUser } from '../../common/decorators/user.decorator';
 import { OrderStatus, UserRole, Tenant } from '@prisma/client';
-import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import type { AuthenticatedOrderUser } from './order.types';
 
@@ -34,6 +34,10 @@ class OrderFilterQuery {
 
 class TrackOrderQuery {
   @IsOptional() @IsString() token?: string;
+}
+
+class RecentOrdersQuery {
+  @IsOptional() @IsInt() @Min(1) @Max(50) @Type(() => Number) limit?: number;
 }
 
 @Controller('orders')
@@ -82,6 +86,13 @@ export class OrderController {
     @Query() filter: OrderFilterQuery,
   ) {
     return this.orderService.findAllForUser(tenant.id, user, filter);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.admin, UserRole.manager, UserRole.superadmin)
+  @Get('recent')
+  recent(@CurrentTenant() tenant: Tenant, @Query() query: RecentOrdersQuery) {
+    return this.orderService.findRecent(tenant.id, query.limit ?? 10);
   }
 
   @UseGuards(JwtAuthGuard)

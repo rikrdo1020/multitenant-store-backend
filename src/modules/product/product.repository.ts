@@ -9,6 +9,7 @@ export interface ProductFilter {
   categoryId?: string;
   brandId?: string;
   tagId?: string;
+  featured?: boolean;
   minPrice?: number;
   maxPrice?: number;
   sort?: 'price_asc' | 'price_desc' | 'newest' | 'name_asc' | 'name_desc';
@@ -38,6 +39,7 @@ export class ProductRepository {
   private buildOrderBy(sort?: string): Prisma.ProductOrderByWithRelationInput[] {
     if (sort === 'price_asc') return [{ price: 'asc' }];
     if (sort === 'price_desc') return [{ price: 'desc' }];
+    if (sort === 'newest') return [{ createdAt: 'desc' }];
     if (sort === 'name_asc') return [{ name: 'asc' }];
     if (sort === 'name_desc') return [{ name: 'desc' }];
     return [{ name: 'asc' }];
@@ -92,6 +94,7 @@ export class ProductRepository {
     if (filter.categoryId) where.categoryId = filter.categoryId;
     if (filter.brandId) where.brandId = filter.brandId;
     if (filter.tagId) where.tags = { some: { id: filter.tagId } };
+    if (filter.featured !== undefined) where.isFeatured = filter.featured;
 
     if (filter.search) {
       where.OR = [
