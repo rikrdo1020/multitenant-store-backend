@@ -13,6 +13,7 @@ import {
 import { OrderService } from './order.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
+import { TrackOrderDto } from './dto/track-order.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles, Public } from '../../common/decorators/roles.decorator';
@@ -21,7 +22,7 @@ import { CurrentUser } from '../../common/decorators/user.decorator';
 import { OrderStatus, UserRole, Tenant } from '@prisma/client';
 import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
 import { Type } from 'class-transformer';
-import type { AuthenticatedOrderUser } from './order.service';
+import type { AuthenticatedOrderUser } from './order.types';
 
 class OrderFilterQuery {
   @IsOptional() @IsEnum(OrderStatus) status?: OrderStatus;
@@ -31,11 +32,15 @@ class OrderFilterQuery {
   @IsOptional() @IsInt() @Min(1) @Type(() => Number) pageSize?: number;
 }
 
+class TrackOrderQuery {
+  @IsOptional() @IsString() token?: string;
+}
+
 @Controller('orders')
 export class OrderController {
   constructor(private readonly orderService: OrderService) {}
 
-  // Storefront — customers create orders without auth
+  // Storefront: customers create orders without auth.
   @Public()
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -43,11 +48,29 @@ export class OrderController {
     return this.orderService.create(tenant.id, dto);
   }
 
-  // Storefront — track own order by public orderId
+  // Storefront: track own order by public view token, or legacy orderId + query token.
   @Public()
-  @Get('track/:orderId')
-  track(@Param('orderId') orderId: string, @CurrentTenant() tenant: Tenant) {
-    return this.orderService.findByOrderId(orderId, tenant.id);
+  @Get('track/:value')
+  track(
+    @Param('value') value: string,
+    @CurrentTenant() tenant: Tenant,
+    @Query() query: TrackOrderQuery,
+  ) {
+    return this.orderService.findPublicTracking(
+      value,
+      tenant.id,
+      query.token,
+    );
+  }
+
+  @Public()
+  @Post('track')
+  @HttpCode(HttpStatus.OK)
+  trackByEmail(
+    @CurrentTenant() tenant: Tenant,
+    @Body() dto: TrackOrderDto,
+  ) {
+    return this.orderService.findPublicTrackingByEmail(tenant.id, dto);
   }
 
   // Storefront account + admin order list. Service applies tenant membership/customer-email scoping.

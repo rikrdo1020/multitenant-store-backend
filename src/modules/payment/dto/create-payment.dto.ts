@@ -6,6 +6,10 @@ export class CreatePaymentDto {
   @IsNotEmpty()
   orderId: string;
 
+  @IsString()
+  @IsNotEmpty()
+  viewToken: string;
+
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
   @Type(() => Number)

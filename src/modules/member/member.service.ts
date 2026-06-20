@@ -12,9 +12,10 @@ import { ResendService } from '../../lib/resend/resend.service';
 import { NotificationService } from '../notification/notification.service';
 import { InviteMemberDto } from './dto/invite-member.dto';
 import { UpdateMemberRoleDto } from './dto/update-member-role.dto';
-import { UserRole } from '@prisma/client';
+import { EmailAction, UserRole } from '@prisma/client';
 import { serialize } from '../../common/utils/serializer';
 import * as crypto from 'crypto';
+import { maskEmail, normalizeEmail } from '../../common/utils/privacy';
 
 const MEMBER_INVITE_TOKEN_BYTES = 32;
 const MEMBER_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -66,7 +67,7 @@ export class MemberService {
     invitedByUserId: string,
     dto: InviteMemberDto,
   ) {
-    const email = dto.email.trim().toLowerCase();
+    const email = normalizeEmail(dto.email);
     const role = dto.role ?? UserRole.manager;
 
     const existingUser = await this.prisma.user.findUnique({ where: { email } });
@@ -142,11 +143,18 @@ export class MemberService {
         tenant.name,
         role,
         invitedBy?.name ?? invitedBy?.email,
+        {
+          action: EmailAction.member_invite,
+          recipient: email,
+          actorKey: invitedByUserId,
+          tenantId: tenant.id,
+          dedupeKey: `${tenant.id}:${email}:${invitation.id}`,
+        },
       );
     } catch (error) {
       await this.invalidateInvitation(invitation.id);
       this.logger.error(
-        `Member invitation email delivery failed for ${email}`,
+        `Member invitation email delivery failed for ${maskEmail(email)}`,
         error instanceof Error ? error.stack : undefined,
       );
       throw new ServiceUnavailableException({

@@ -75,14 +75,14 @@ export class ProductRepository {
 
   update(id: string, tenantId: string, data: Prisma.ProductUpdateInput): Promise<Product> {
     return this.prisma.product.update({
-      where: { id },
+      where: { id, tenantId },
       data,
       include: PRODUCT_INCLUDE,
     } as any);
   }
 
   delete(id: string, tenantId: string): Promise<Product> {
-    return this.prisma.product.delete({ where: { id } });
+    return this.prisma.product.delete({ where: { id, tenantId } });
   }
 
   private buildWhere(filter: ProductFilter): Prisma.ProductWhereInput {

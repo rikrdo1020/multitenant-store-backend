@@ -2,7 +2,8 @@ import * as crypto from 'crypto';
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OrderStatus } from '@prisma/client';
-import { PrismaService } from '../../prisma/prisma.service';
+import { OrderEmailService } from '../order/order-email.service';
+import { OrderStockService } from '../order/order-stock.service';
 
 export interface StripeWebhookEvent {
   type: string;
@@ -27,12 +28,24 @@ function mapYappyStatus(code: string): OrderStatus {
   return YAPPY_STATUS_MAP[code] ?? OrderStatus.pending;
 }
 
-function validateYappyHash(secretKey: string, orderId: string, status: string, domain: string, hash: string): boolean {
+function validateYappyHash(
+  secretKey: string,
+  orderId: string,
+  status: string,
+  domain: string,
+  hash: string,
+): boolean {
   try {
     const rawKey = Buffer.from(secretKey, 'base64').toString('utf8');
     const secret = rawKey.split('.')[0];
-    const computed = crypto.createHmac('sha256', secret).update(orderId + status + domain).digest('hex');
-    return crypto.timingSafeEqual(Buffer.from(computed, 'hex'), Buffer.from(hash, 'hex'));
+    const computed = crypto
+      .createHmac('sha256', secret)
+      .update(orderId + status + domain)
+      .digest('hex');
+    return crypto.timingSafeEqual(
+      Buffer.from(computed, 'hex'),
+      Buffer.from(hash, 'hex'),
+    );
   } catch {
     return false;
   }
@@ -43,11 +56,15 @@ export class WebhookService {
   private readonly logger = new Logger(WebhookService.name);
 
   constructor(
-    private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly orderStockService: OrderStockService,
+    private readonly orderEmailService: OrderEmailService,
   ) {}
 
-  async handleStripe(event: StripeWebhookEvent, tenantId: string): Promise<void> {
+  async handleStripe(
+    event: StripeWebhookEvent,
+    tenantId: string,
+  ): Promise<void> {
     this.logger.log(`Stripe webhook: ${event.type} for tenant ${tenantId}`);
 
     switch (event.type) {
@@ -71,29 +88,43 @@ export class WebhookService {
   async handleYappy(params: YappyWebhookParams): Promise<void> {
     const secretKey = this.configService.get<string>('YAPPY_SECRET_KEY', '');
 
-    const isValid = validateYappyHash(secretKey, params.orderId, params.status, params.domain, params.hash);
+    const isValid = validateYappyHash(
+      secretKey,
+      params.orderId,
+      params.status,
+      params.domain,
+      params.hash,
+    );
     if (!isValid) {
       this.logger.warn(`Invalid Yappy hash for order ${params.orderId}`);
       throw new UnauthorizedException('Invalid hash');
     }
 
-    const order = await this.prisma.order.findFirst({ where: { orderId: `ORD-${params.orderId}` } });
+    const fullOrderId = `ORD-${params.orderId}`;
+    const order = await this.orderStockService.transitionOrderStatusByOrderId(
+      fullOrderId,
+      undefined,
+      {
+        orderStatus: mapYappyStatus(params.status),
+      },
+    );
     if (!order) {
       this.logger.warn(`Yappy webhook: order ${params.orderId} not found`);
       return;
     }
 
     const mappedStatus = mapYappyStatus(params.status);
+    await this.orderEmailService.sendOrderStatusNotification(order);
 
-    await this.prisma.order.update({
-      where: { id: order.id },
-      data: { orderStatus: mappedStatus },
-    });
-
-    this.logger.log(`Yappy webhook: order ORD-${params.orderId} → ${mappedStatus}`);
+    this.logger.log(
+      `Yappy webhook: order ORD-${params.orderId} -> ${mappedStatus}`,
+    );
   }
 
-  private async handlePaymentSucceeded(object: Record<string, unknown>, tenantId: string): Promise<void> {
+  private async handlePaymentSucceeded(
+    object: Record<string, unknown>,
+    tenantId: string,
+  ): Promise<void> {
     const transactionId = object['id'] as string;
     const metadata = object['metadata'] as Record<string, string> | undefined;
     const orderId = metadata?.['orderId'];
@@ -103,36 +134,60 @@ export class WebhookService {
       return;
     }
 
-    await this.prisma.order.updateMany({
-      where: { orderId, tenantId },
-      data: { orderStatus: OrderStatus.paid, transactionId },
-    });
+    const order = await this.orderStockService.transitionOrderStatusByOrderId(
+      orderId,
+      tenantId,
+      {
+        orderStatus: OrderStatus.paid,
+        transactionId,
+      },
+    );
+    if (order) {
+      await this.orderEmailService.sendOrderStatusNotification(order);
+    }
 
     this.logger.log(`Order ${orderId} marked as paid (txn: ${transactionId})`);
   }
 
-  private async handlePaymentFailed(object: Record<string, unknown>, tenantId: string): Promise<void> {
+  private async handlePaymentFailed(
+    object: Record<string, unknown>,
+    tenantId: string,
+  ): Promise<void> {
     const metadata = object['metadata'] as Record<string, string> | undefined;
     const orderId = metadata?.['orderId'];
     if (!orderId) return;
 
-    await this.prisma.order.updateMany({
-      where: { orderId, tenantId },
-      data: { orderStatus: OrderStatus.failed },
-    });
+    const order = await this.orderStockService.transitionOrderStatusByOrderId(
+      orderId,
+      tenantId,
+      {
+        orderStatus: OrderStatus.failed,
+      },
+    );
+    if (order) {
+      await this.orderEmailService.sendOrderStatusNotification(order);
+    }
 
     this.logger.warn(`Order ${orderId} payment failed`);
   }
 
-  private async handleSessionExpired(object: Record<string, unknown>, tenantId: string): Promise<void> {
+  private async handleSessionExpired(
+    object: Record<string, unknown>,
+    tenantId: string,
+  ): Promise<void> {
     const metadata = object['metadata'] as Record<string, string> | undefined;
     const orderId = metadata?.['orderId'];
     if (!orderId) return;
 
-    await this.prisma.order.updateMany({
-      where: { orderId, tenantId, orderStatus: OrderStatus.pending },
-      data: { orderStatus: OrderStatus.expired },
-    });
+    const order = await this.orderStockService.transitionOrderStatusByOrderId(
+      orderId,
+      tenantId,
+      { orderStatus: OrderStatus.expired },
+      { onlyFrom: [OrderStatus.pending] },
+    );
+    if (order) {
+      await this.orderEmailService.sendOrderStatusNotification(order);
+    }
 
     this.logger.log(`Order ${orderId} expired`);
   }

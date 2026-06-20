@@ -17,4 +17,20 @@ export class UpdateOrderStatusDto {
   @IsOptional()
   @IsBoolean()
   dispatched?: boolean;
+
+  @IsOptional()
+  @IsString()
+  trackingNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  trackingCarrier?: string;
+
+  @IsOptional()
+  @IsString()
+  trackingUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  adminNote?: string;
 }

@@ -44,14 +44,11 @@ export class TenantRepository {
   }
 
   createWithOwner(data: Prisma.TenantCreateInput, ownerId: string): Promise<Tenant> {
-    console.log('[createWithOwner] called', { slug: (data as Record<string, unknown>).slug, ownerId });
     return this.prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({ data });
-      console.log('[createWithOwner] tenant created', tenant.id);
       await tx.tenantMember.create({
         data: { userId: ownerId, tenantId: tenant.id, role: 'admin' },
       });
-      console.log('[createWithOwner] TenantMember created');
       return tenant;
     });
   }

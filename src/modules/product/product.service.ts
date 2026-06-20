@@ -33,7 +33,11 @@ export class ProductService {
       this.repo.count(filterParams),
     ]);
 
-    return serializeList(items, { page, pageSize, total });
+    return serializeList(items.map((item) => this.withStockStatus(item)), {
+      page,
+      pageSize,
+      total,
+    });
   }
 
   async findBySlug(slug: string, tenantId: string) {
@@ -41,7 +45,7 @@ export class ProductService {
     if (!product) {
       throw new NotFoundException({ code: 'PRODUCT_NOT_FOUND', message: `Product '${slug}' not found` });
     }
-    return serialize(product);
+    return serialize(this.withStockStatus(product));
   }
 
   async findById(id: string, tenantId: string) {
@@ -49,7 +53,7 @@ export class ProductService {
     if (!product) {
       throw new NotFoundException({ code: 'PRODUCT_NOT_FOUND', message: `Product not found` });
     }
-    return serialize(product);
+    return serialize(this.withStockStatus(product));
   }
 
   async create(tenantId: string, dto: CreateProductDto) {
@@ -71,7 +75,7 @@ export class ProductService {
       ...(tagIds?.length && { tags: { connect: tagIds.map((id) => ({ id })) } }),
     });
 
-    return serialize(product);
+    return serialize(this.withStockStatus(product));
   }
 
   async update(id: string, tenantId: string, dto: UpdateProductInput) {
@@ -94,11 +98,32 @@ export class ProductService {
       }),
     });
 
-    return serialize(product);
+    return serialize(this.withStockStatus(product));
   }
 
   async remove(id: string, tenantId: string): Promise<void> {
     await this.findById(id, tenantId);
     await this.repo.delete(id, tenantId);
+  }
+
+  private withStockStatus<T extends { stock: number; reservedStock?: number }>(
+    product: T,
+  ) {
+    const availableStock = Math.max(
+      0,
+      product.stock - (product.reservedStock ?? 0),
+    );
+
+    return {
+      ...product,
+      availableStock,
+      stockStatus: this.getStockStatus(availableStock),
+    };
+  }
+
+  private getStockStatus(availableStock: number) {
+    if (availableStock <= 0) return 'out_of_stock';
+    if (availableStock <= 5) return 'low_stock';
+    return 'in_stock';
   }
 }

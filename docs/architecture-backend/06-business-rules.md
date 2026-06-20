@@ -28,7 +28,7 @@ Cart is client-side only (Native app / Web). The backend validates cart contents
 - Item uniqueness key: `documentId` OR `documentId:JSON(selectedOptions)` if variants.
 - Price used: `discountPrice ?? price`.
 - Backend recalculates pricing on order creation using `calculateCartPricing(items, activeCombos)`.
-- Stock validation is server-side: rejects order if any item exceeds available stock.
+- Stock validation is server-side: rejects order if any item exceeds available stock (`stock - reservedStock`).
 
 ## Combos (BT-04)
 
@@ -62,8 +62,18 @@ Order creation flow:
 4. Generate `orderId = "ORD-{Date.now()}"`
 5. Create `Customer` record if email not found in tenant
 6. Create `Order` with status `pending`
-7. Initialize payment with configured provider
-8. Return order + payment credentials to client
+7. Reserve stock by incrementing `Product.reservedStock` in the same transaction
+8. Send non-blocking transactional emails: customer order-created email and store/admin new-order notification
+9. Initialize payment with configured provider
+10. Return order + payment credentials to client
+
+Stock lifecycle:
+- `pending` orders hold stock in `reservedStock`.
+- `paid`, `processing`, `ready`, `shipped`, and `delivered` consume stock and release the reservation.
+- `cancelled`, `failed`, `rejected`, and `expired` release or restore stock depending on the previous state.
+- Pending reservations older than 15 minutes expire automatically.
+
+Transactional email failures must be observable in logs/email delivery records, but they must not roll back order creation, payment confirmation, or webhook status updates.
 
 ## Shipping (BT-06)
 

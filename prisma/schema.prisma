@@ -26,6 +26,10 @@ enum ShippingType {
 enum OrderStatus {
   pending
   paid
+  processing
+  ready
+  shipped
+  delivered
   cancelled
   failed
   rejected
@@ -56,6 +60,23 @@ enum PaymentProvider {
   mercadopago
 }
 
+enum EmailAction {
+  password_reset
+  member_invite
+  order_created_customer
+  order_created_admin
+  payment_confirmed
+  order_status_changed
+}
+
+enum EmailDeliveryStatus {
+  attempted
+  sent
+  failed
+  blocked
+  skipped
+}
+
 enum NotificationPlatform {
   ios
   android
@@ -79,6 +100,7 @@ model User {
   phone        String?
   role                UserRole @default(manager)
   isActive            Boolean  @default(true)
+  tokenVersion        Int      @default(0)
   onboardingCompleted Boolean  @default(false)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -112,6 +134,26 @@ model PasswordResetToken {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+model EmailDelivery {
+  id            String              @id @default(cuid())
+  action        EmailAction
+  status        EmailDeliveryStatus @default(attempted)
+  recipientHash String
+  actorHash     String?
+  tenantId      String?
+  dedupeKeyHash String?             @unique
+  reason        String?
+  errorMessage  String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@index([action, recipientHash, createdAt])
+  @@index([action, actorHash, createdAt])
+  @@index([action, tenantId, createdAt])
+  @@index([status, createdAt])
+  @@index([createdAt])
 }
 
 model Tenant {
@@ -306,6 +348,7 @@ model Product {
   discountPrice  Decimal?      @db.Decimal(10, 2)
   dku            String
   stock          Int           @default(0)
+  reservedStock  Int           @default(0)
   productStatus  ProductStatus @default(draft)
   type           String?
   volume         String?
@@ -382,20 +425,38 @@ model Order {
   customerData       Json
   shippingData       Json
   items              Json
+  pricingBreakdown   Json?
   shippingMethodId   String?
   shippingLocationId String?
   paymentProvider    String?
   paymentMethod      String      @default("stripe")
   confirmationNumber String?
   dispatched         Boolean     @default(false)
+  trackingNumber     String?
+  trackingCarrier    String?
+  trackingUrl        String?
+  viewTokenHash      String?     @unique
 
-  tenantId   String
-  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  customerId String?
-  customer   Customer? @relation(fields: [customerId], references: [id])
+  tenantId      String
+  tenant        Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerId    String?
+  customer      Customer?            @relation(fields: [customerId], references: [id])
+  statusHistory OrderStatusHistory[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model OrderStatusHistory {
+  id        String      @id @default(cuid())
+  orderId   String
+  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status    OrderStatus
+  note      String?
+  changedBy String?
+  createdAt DateTime    @default(now())
+
+  @@index([orderId, createdAt])
 }
 
 // ---------------------------------------------------------------------------
